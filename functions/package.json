@@ -1,0 +1,14 @@
+{
+  "name": "smart-campus-pwr-functions",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "seed:admin": "node scripts/seedAdmin.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  }
+}
