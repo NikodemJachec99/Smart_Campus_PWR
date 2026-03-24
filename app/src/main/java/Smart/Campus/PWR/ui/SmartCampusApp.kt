@@ -5,7 +5,18 @@ import Smart.Campus.PWR.auth.UserRole
 import Smart.Campus.PWR.ui.state.AppScreen
 import Smart.Campus.PWR.ui.state.CreateUserFormState
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
+import Smart.Campus.PWR.ui.theme.AppBackground
+import Smart.Campus.PWR.ui.theme.AppSurface
+import Smart.Campus.PWR.ui.theme.AppSurfaceMuted
+import Smart.Campus.PWR.ui.theme.PwrBlueSoft
+import Smart.Campus.PWR.ui.theme.PwrNavy
+import Smart.Campus.PWR.ui.theme.PwrNavyDark
+import Smart.Campus.PWR.ui.theme.PwrRed
+import Smart.Campus.PWR.ui.theme.TextPrimary
+import Smart.Campus.PWR.ui.theme.TextSecondary
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,14 +27,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -33,6 +48,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -63,13 +80,24 @@ fun SmartCampusApp(viewModel: SmartCampusViewModel = viewModel()) {
             onLogout = viewModel::logout
         )
 
-        AppScreen.ROLE_HOME -> RoleHomeScreen(
-            state = state,
-            onSwitchRole = viewModel::openRolePicker,
-            onLogout = viewModel::logout
-        )
+        AppScreen.MAIN_SHELL -> {
+            val currentUser = state.currentUser
+            val activeRole = state.activeRole
+            if (currentUser != null && activeRole != null) {
+                MainShellScreen(
+                    state = state.dashboardState,
+                    currentUser = currentUser,
+                    activeRole = activeRole,
+                    onRefreshDashboard = viewModel::refreshDashboard,
+                    onLogout = viewModel::logout,
+                    onOpenRolePicker = viewModel::openRolePicker
+                )
+            } else {
+                LoadingScreen()
+            }
+        }
 
-        AppScreen.ADMIN_PANEL -> AdminPanelScreen(
+        AppScreen.ADMIN_PANEL -> AdminShellScreen(
             state = state,
             onRefresh = viewModel::refreshAdminUsers,
             onLogout = viewModel::logout,
@@ -88,16 +116,26 @@ fun SmartCampusApp(viewModel: SmartCampusViewModel = viewModel()) {
 
 @Composable
 private fun LoadingScreen() {
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-        Column(
+    Scaffold(containerColor = AppBackground) { padding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+            contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator()
-            Text("Ladowanie sesji...", modifier = Modifier.padding(top = 12.dp))
+            Card(
+                shape = RoundedCornerShape(30.dp),
+                colors = CardDefaults.cardColors(containerColor = PwrNavy)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(color = Color.White)
+                    Text("Ladowanie Smart Campus PWR...", color = Color.White)
+                }
+            }
         }
     }
 }
@@ -110,83 +148,77 @@ private fun LoginScreen(
     onLoginClick: () -> Unit,
     onClearMessages: () -> Unit
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-        Column(
+    Scaffold(containerColor = AppBackground) { padding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Smart Campus PWR",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                text = "Logowanie (alias + haslo)",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
-            )
-
-            OutlinedTextField(
-                value = state.loginInput,
-                onValueChange = {
-                    onClearMessages()
-                    onLoginChanged(it)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Login lub email") },
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = state.passwordInput,
-                onValueChange = {
-                    onClearMessages()
-                    onPasswordChanged(it)
-                },
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp),
-                label = { Text("Haslo") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation()
+                    .height(260.dp)
+                    .background(Brush.verticalGradient(listOf(PwrNavy, PwrNavyDark)))
             )
 
-            if (state.errorMessage != null) {
-                Text(
-                    text = state.errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-            }
-
-            if (state.infoMessage != null) {
-                Text(
-                    text = state.infoMessage,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-            }
-
-            Button(
-                onClick = onLoginClick,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                enabled = !state.isBusy
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.Center
             ) {
-                Text(if (state.isBusy) "Logowanie..." else "Zaloguj")
-            }
+                Text("Smart Campus PWR", color = Color.White, style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(bottom = 20.dp))
+                Card(
+                    shape = RoundedCornerShape(30.dp),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("Logowanie", style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
+                        Text("Zaloguj sie aliasem lub adresem email, aby przejsc do panelu PWr.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
 
-            Text(
-                text = "Test admin: login admin / haslo admin123",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 16.dp)
-            )
+                        OutlinedTextField(
+                            value = state.loginInput,
+                            onValueChange = {
+                                onClearMessages()
+                                onLoginChanged(it)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Login lub email") },
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = state.passwordInput,
+                            onValueChange = {
+                                onClearMessages()
+                                onPasswordChanged(it)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Haslo") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation()
+                        )
+
+                        if (state.errorMessage != null) {
+                            Surface(color = PwrRed.copy(alpha = 0.08f), shape = RoundedCornerShape(18.dp)) {
+                                Text(state.errorMessage, color = PwrRed, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+
+                        if (state.infoMessage != null) {
+                            Surface(color = PwrBlueSoft, shape = RoundedCornerShape(18.dp)) {
+                                Text(state.infoMessage, color = PwrNavy, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+
+                        Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy) {
+                            Text(if (state.isBusy) "Logowanie..." else "Zaloguj")
+                        }
+
+                        Text("Test admin: login admin / haslo admin123", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    }
+                }
+            }
         }
     }
 }
@@ -198,79 +230,34 @@ private fun RolePickerScreen(
     onLecturerClick: () -> Unit,
     onLogout: () -> Unit
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+    Scaffold(containerColor = AppBackground) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(20.dp),
+            verticalArrangement = Arrangement.Center
         ) {
-            Text("Wybierz aktywna role", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(state.currentUser?.displayName.orEmpty(), modifier = Modifier.padding(top = 6.dp, bottom = 20.dp))
-
-            Button(onClick = onStudentClick, modifier = Modifier.fillMaxWidth()) {
-                Text("Kontynuuj jako Student")
-            }
-
-            Button(
-                onClick = onLecturerClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            ) {
-                Text("Kontynuuj jako Wykladowca")
-            }
-
-            OutlinedButton(onClick = onLogout, modifier = Modifier.padding(top = 20.dp)) {
-                Text("Wyloguj")
-            }
-        }
-    }
-}
-
-@Composable
-private fun RoleHomeScreen(
-    state: SmartCampusUiState,
-    onSwitchRole: () -> Unit,
-    onLogout: () -> Unit
-) {
-    val dualRole = state.currentUser?.hasDualRole() == true
-
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("Zalogowano jako", style = MaterialTheme.typography.titleMedium)
-            Text(
-                state.activeRole?.displayName ?: "Brak roli",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp, bottom = 20.dp)
-            )
-            Text("To jest placeholder ekranu dla wybranej roli.")
-
-            if (dualRole) {
-                OutlinedButton(onClick = onSwitchRole, modifier = Modifier.padding(top = 20.dp)) {
-                    Text("Przelacz role")
+            Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = PwrNavy)) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Wybierz aktywna role", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                    Text(state.currentUser?.displayName.orEmpty(), color = PwrBlueSoft)
                 }
             }
 
-            OutlinedButton(onClick = onLogout, modifier = Modifier.padding(top = 12.dp)) {
-                Text("Wyloguj")
+            Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface), modifier = Modifier.padding(top = 16.dp)) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = onStudentClick, modifier = Modifier.fillMaxWidth()) { Text("Kontynuuj jako Student") }
+                    Button(onClick = onLecturerClick, modifier = Modifier.fillMaxWidth()) { Text("Kontynuuj jako Wykladowca") }
+                    OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Wyloguj") }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AdminPanelScreen(
+fun AdminPanelScreen(
     state: SmartCampusUiState,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
@@ -284,83 +271,91 @@ private fun AdminPanelScreen(
     onUpdateUserRoles: (String, Boolean, Boolean) -> Unit,
     onClearMessages: () -> Unit
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-        Column(
+    Scaffold(containerColor = AppBackground) { padding ->
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(padding),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Panel Admin", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-            Text("${state.currentUser?.displayName.orEmpty()} (${state.currentUser?.login.orEmpty()})")
-
-            Row(modifier = Modifier.padding(top = 12.dp)) {
-                Button(onClick = onRefresh, enabled = !state.isAdminUsersLoading && !state.isAdminSubmitting) {
-                    Text(if (state.isAdminUsersLoading) "Odswiezanie..." else "Odswiez")
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = onLogout) {
-                    Text("Wyloguj")
+            item {
+                Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = PwrNavy)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Panel Admin", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                        Text(state.currentUser?.displayName.orEmpty(), color = PwrBlueSoft)
+                        Row(modifier = Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(onClick = onRefresh, enabled = !state.isAdminUsersLoading && !state.isAdminSubmitting) {
+                                Text(if (state.isAdminUsersLoading) "Odswiezanie..." else "Odswiez")
+                            }
+                            OutlinedButton(onClick = onLogout) { Text("Wyloguj") }
+                        }
+                    }
                 }
             }
 
             if (state.errorMessage != null) {
-                Text(state.errorMessage, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 10.dp))
+                item {
+                    Surface(color = PwrRed.copy(alpha = 0.08f), shape = RoundedCornerShape(18.dp)) {
+                        Text(state.errorMessage, color = PwrRed, modifier = Modifier.padding(12.dp))
+                    }
+                }
             }
 
             if (state.infoMessage != null) {
-                Text(state.infoMessage, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 10.dp))
+                item {
+                    Surface(color = PwrBlueSoft, shape = RoundedCornerShape(18.dp)) {
+                        Text(state.infoMessage, color = PwrNavy, modifier = Modifier.padding(12.dp))
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            item {
+                CreateUserCard(
+                    form = state.createUserForm,
+                    isSubmitting = state.isAdminSubmitting,
+                    onCreateLoginChanged = {
+                        onClearMessages()
+                        onCreateLoginChanged(it)
+                    },
+                    onCreatePasswordChanged = {
+                        onClearMessages()
+                        onCreatePasswordChanged(it)
+                    },
+                    onCreateDisplayNameChanged = {
+                        onClearMessages()
+                        onCreateDisplayNameChanged(it)
+                    },
+                    onCreateAdminChecked = {
+                        onClearMessages()
+                        onCreateAdminChecked(it)
+                    },
+                    onCreateStudentChecked = {
+                        onClearMessages()
+                        onCreateStudentChecked(it)
+                    },
+                    onCreateLecturerChecked = {
+                        onClearMessages()
+                        onCreateLecturerChecked(it)
+                    },
+                    onCreateUserClick = onCreateUserClick
+                )
+            }
 
-            CreateUserCard(
-                form = state.createUserForm,
-                isSubmitting = state.isAdminSubmitting,
-                onCreateLoginChanged = {
-                    onClearMessages()
-                    onCreateLoginChanged(it)
-                },
-                onCreatePasswordChanged = {
-                    onClearMessages()
-                    onCreatePasswordChanged(it)
-                },
-                onCreateDisplayNameChanged = {
-                    onClearMessages()
-                    onCreateDisplayNameChanged(it)
-                },
-                onCreateAdminChecked = {
-                    onClearMessages()
-                    onCreateAdminChecked(it)
-                },
-                onCreateStudentChecked = {
-                    onClearMessages()
-                    onCreateStudentChecked(it)
-                },
-                onCreateLecturerChecked = {
-                    onClearMessages()
-                    onCreateLecturerChecked(it)
-                },
-                onCreateUserClick = onCreateUserClick
-            )
-
-            Text("Uzytkownicy", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+            item {
+                Text("Uzytkownicy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
 
             if (state.adminUsers.isEmpty() && !state.isAdminUsersLoading) {
-                Text("Brak uzytkownikow.")
+                item {
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
+                        Text("Brak uzytkownikow.", modifier = Modifier.padding(16.dp), color = TextSecondary)
+                    }
+                }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(state.adminUsers, key = { it.uid }) { listedUser ->
-                    UserRow(
-                        user = listedUser,
-                        isSubmitting = state.isAdminSubmitting,
-                        onUpdateUserRoles = onUpdateUserRoles
-                    )
-                }
+            items(state.adminUsers, key = { it.uid }) { listedUser ->
+                UserRow(user = listedUser, isSubmitting = state.isAdminSubmitting, onUpdateUserRoles = onUpdateUserRoles)
             }
         }
     }
@@ -378,62 +373,33 @@ private fun CreateUserCard(
     onCreateLecturerChecked: (Boolean) -> Unit,
     onCreateUserClick: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text("Dodaj nowego uzytkownika", fontWeight = FontWeight.Bold)
-            Text(
-                "Haslo musi miec co najmniej 6 znakow.",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Dodaj nowego uzytkownika", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Haslo musi miec co najmniej 6 znakow.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
 
-            OutlinedTextField(
-                value = form.login,
-                onValueChange = onCreateLoginChanged,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                label = { Text("Login") },
-                singleLine = true,
-                enabled = !isSubmitting
-            )
+            OutlinedTextField(value = form.login, onValueChange = onCreateLoginChanged, modifier = Modifier.fillMaxWidth(), label = { Text("Login") }, singleLine = true, enabled = !isSubmitting)
+            OutlinedTextField(value = form.password, onValueChange = onCreatePasswordChanged, modifier = Modifier.fillMaxWidth(), label = { Text("Haslo") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), enabled = !isSubmitting)
+            OutlinedTextField(value = form.displayName, onValueChange = onCreateDisplayNameChanged, modifier = Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, enabled = !isSubmitting)
 
-            OutlinedTextField(
-                value = form.password,
-                onValueChange = onCreatePasswordChanged,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                label = { Text("Haslo") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                enabled = !isSubmitting
-            )
-
-            OutlinedTextField(
-                value = form.displayName,
-                onValueChange = onCreateDisplayNameChanged,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                label = { Text("Display name") },
-                singleLine = true,
-                enabled = !isSubmitting
-            )
-
-            Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = form.admin, onCheckedChange = onCreateAdminChecked, enabled = !isSubmitting)
-                Text("Admin")
-                Spacer(Modifier.width(12.dp))
-                Checkbox(checked = form.student, onCheckedChange = onCreateStudentChecked, enabled = !isSubmitting)
-                Text("Student")
-                Spacer(Modifier.width(12.dp))
-                Checkbox(checked = form.lecturer, onCheckedChange = onCreateLecturerChecked, enabled = !isSubmitting)
-                Text("Lecturer")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                RoleCheckboxRow("Admin", form.admin, onCreateAdminChecked, isSubmitting)
+                RoleCheckboxRow("Student", form.student, onCreateStudentChecked, isSubmitting)
+                RoleCheckboxRow("Lecturer", form.lecturer, onCreateLecturerChecked, isSubmitting)
             }
 
-            Button(
-                onClick = onCreateUserClick,
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                enabled = !isSubmitting
-            ) {
+            Button(onClick = onCreateUserClick, modifier = Modifier.fillMaxWidth(), enabled = !isSubmitting) {
                 Text(if (isSubmitting) "Tworzenie..." else "Dodaj uzytkownika")
             }
         }
+    }
+}
+
+@Composable
+private fun RoleCheckboxRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, isSubmitting: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange, enabled = !isSubmitting)
+        Text(label)
     }
 }
 
@@ -450,26 +416,25 @@ private fun UserRow(
     val changed = student != user.hasRole(UserRole.STUDENT) || lecturer != user.hasRole(UserRole.LECTURER)
     val rolesLabel = user.roles.joinToString { it.displayName }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(user.displayName, fontWeight = FontWeight.Bold)
-            Text("${user.login} | ${user.email}", style = MaterialTheme.typography.bodySmall)
-            Text("Role: $rolesLabel", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(user.displayName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text("${user.login} | ${user.email}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            Surface(color = AppSurfaceMuted, shape = RoundedCornerShape(12.dp)) {
+                Text("Role: $rolesLabel", modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall)
+            }
 
             if (isAdminUser) {
-                Text("Rola admin nie jest edytowalna z panelu.", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+                Text("Rola admin nie jest edytowalna z panelu.", color = PwrNavy, style = MaterialTheme.typography.bodySmall)
             } else {
-                Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = student, onCheckedChange = { student = it }, enabled = !isSubmitting)
                     Text("Student")
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Checkbox(checked = lecturer, onCheckedChange = { lecturer = it }, enabled = !isSubmitting)
                     Text("Lecturer")
                     Spacer(modifier = Modifier.weight(1f))
-                    Button(
-                        onClick = { onUpdateUserRoles(user.uid, student, lecturer) },
-                        enabled = !isSubmitting && changed && (student || lecturer)
-                    ) {
+                    Button(onClick = { onUpdateUserRoles(user.uid, student, lecturer) }, enabled = !isSubmitting && changed && (student || lecturer)) {
                         Text("Zapisz")
                     }
                 }
@@ -477,3 +442,5 @@ private fun UserRow(
         }
     }
 }
+
+

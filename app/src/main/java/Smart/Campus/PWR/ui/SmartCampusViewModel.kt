@@ -5,9 +5,15 @@ import Smart.Campus.PWR.auth.FirebaseAuthRepository
 import Smart.Campus.PWR.auth.SessionDestination
 import Smart.Campus.PWR.auth.SessionRouter
 import Smart.Campus.PWR.auth.UserRole
+import Smart.Campus.PWR.dashboard.DashboardRepository
+import Smart.Campus.PWR.ui.state.AiTutorPlanUi
 import Smart.Campus.PWR.ui.state.AppScreen
 import Smart.Campus.PWR.ui.state.CreateUserFormState
+import Smart.Campus.PWR.ui.state.DashboardUiState
+import Smart.Campus.PWR.ui.state.HomeUserSummaryUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
+import Smart.Campus.PWR.ui.state.UpcomingClassUi
+import Smart.Campus.PWR.ui.state.XpSummaryUi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +23,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SmartCampusViewModel(
-    private val repository: FirebaseAuthRepository = FirebaseAuthRepository()
+    private val repository: FirebaseAuthRepository = FirebaseAuthRepository(),
+    private val dashboardRepository: DashboardRepository = DashboardRepository()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SmartCampusUiState())
     val uiState: StateFlow<SmartCampusUiState> = _uiState.asStateFlow()
@@ -98,13 +105,8 @@ class SmartCampusViewModel(
             return
         }
 
-        _uiState.update {
-            it.copy(
-                screen = AppScreen.ROLE_HOME,
-                activeRole = role,
-                errorMessage = null,
-                infoMessage = null
-            )
+        viewModelScope.launch {
+            navigateToMainShell(currentUser, role)
         }
     }
 
@@ -121,6 +123,15 @@ class SmartCampusViewModel(
                 errorMessage = null,
                 infoMessage = null
             )
+        }
+    }
+
+    fun refreshDashboard() {
+        val user = _uiState.value.currentUser ?: return
+        val activeRole = _uiState.value.activeRole ?: return
+
+        viewModelScope.launch {
+            loadDashboard(user, activeRole)
         }
     }
 
@@ -281,34 +292,8 @@ class SmartCampusViewModel(
                 }
             }
 
-            SessionDestination.ROLE_HOME_STUDENT -> {
-                _uiState.update {
-                    it.copy(
-                        isBootstrapping = false,
-                        isBusy = false,
-                        screen = AppScreen.ROLE_HOME,
-                        currentUser = user,
-                        activeRole = UserRole.STUDENT,
-                        passwordInput = "",
-                        errorMessage = null
-                    )
-                }
-            }
-
-            SessionDestination.ROLE_HOME_LECTURER -> {
-                _uiState.update {
-                    it.copy(
-                        isBootstrapping = false,
-                        isBusy = false,
-                        screen = AppScreen.ROLE_HOME,
-                        currentUser = user,
-                        activeRole = UserRole.LECTURER,
-                        passwordInput = "",
-                        errorMessage = null
-                    )
-                }
-            }
-
+            SessionDestination.ROLE_HOME_STUDENT -> navigateToMainShell(user, UserRole.STUDENT)
+            SessionDestination.ROLE_HOME_LECTURER -> navigateToMainShell(user, UserRole.LECTURER)
             SessionDestination.LOGIN -> {
                 _uiState.update {
                     it.copy(
@@ -323,4 +308,130 @@ class SmartCampusViewModel(
             }
         }
     }
+
+    private suspend fun navigateToMainShell(user: AppUser, role: UserRole) {
+        _uiState.update {
+            it.copy(
+                isBootstrapping = false,
+                isBusy = false,
+                screen = AppScreen.MAIN_SHELL,
+                currentUser = user,
+                activeRole = role,
+                passwordInput = "",
+                errorMessage = null,
+                dashboardState = buildDashboardState(
+                    user = user,
+                    activeRole = role,
+                    upcomingClasses = emptyList(),
+                    isLoading = true
+                )
+            )
+        }
+
+        loadDashboard(user, role)
+    }
+
+    private suspend fun loadDashboard(user: AppUser, activeRole: UserRole) {
+        _uiState.update {
+            it.copy(
+                dashboardState = it.dashboardState.copy(isLoading = true),
+                errorMessage = null
+            )
+        }
+
+        val upcomingClasses = try {
+            dashboardRepository.getUpcomingClasses(user, activeRole)
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        _uiState.update {
+            it.copy(
+                dashboardState = buildDashboardState(
+                    user = user,
+                    activeRole = activeRole,
+                    upcomingClasses = upcomingClasses,
+                    isLoading = false
+                )
+            )
+        }
+    }
+
+    private fun buildDashboardState(
+        user: AppUser,
+        activeRole: UserRole,
+        upcomingClasses: List<UpcomingClassUi>,
+        isLoading: Boolean
+    ): DashboardUiState {
+        val roleLabel = when (activeRole) {
+            UserRole.STUDENT -> "Tryb Student"
+            UserRole.LECTURER -> "Tryb Wykladowca"
+            UserRole.ADMIN -> "Tryb Admin"
+        }
+
+        val greeting = when (activeRole) {
+            UserRole.STUDENT -> "Dzien dobry,"
+            UserRole.LECTURER -> "Witaj ponownie,"
+            UserRole.ADMIN -> "Witaj,"
+        }
+
+        val xpSummary = when (activeRole) {
+            UserRole.STUDENT -> XpSummaryUi(
+                currentXp = 1250,
+                targetXp = 2000,
+                helperLabel = "Modul gamifikacji jest w wersji demonstracyjnej",
+                badges = listOf("XP", "AI"),
+                isPlaceholder = true
+            )
+            UserRole.LECTURER -> XpSummaryUi(
+                currentXp = 890,
+                targetXp = 1500,
+                helperLabel = "Statystyki aktywnosci prowadzacego sa w przygotowaniu",
+                badges = listOf("LE", "AI"),
+                isPlaceholder = true
+            )
+            UserRole.ADMIN -> XpSummaryUi(
+                currentXp = 0,
+                targetXp = 1,
+                helperLabel = "Dashboard admina pozostaje osobnym ekranem",
+                badges = emptyList(),
+                isPlaceholder = true
+            )
+        }
+
+        val aiPlan = when (activeRole) {
+            UserRole.STUDENT -> AiTutorPlanUi(
+                title = "AI Tutor: Twoj plan na dzis",
+                description = "Podlacz modul AI, aby otrzymywac zadania dopasowane do Twojego poziomu i terminow.",
+                taskTitle = "Brak aktywnego planu AI",
+                estimatedTimeLabel = "Oczekuje na integracje",
+                isPlaceholder = true
+            )
+            UserRole.LECTURER -> AiTutorPlanUi(
+                title = "AI Assistant: wsparcie prowadzacego",
+                description = "Tutaj pojawia sie rekomendacje materialow, streszczenia zajec i wskazowki dla grup.",
+                taskTitle = "Brak aktywnych rekomendacji",
+                estimatedTimeLabel = "Oczekuje na integracje",
+                isPlaceholder = true
+            )
+            UserRole.ADMIN -> null
+        }
+
+        return DashboardUiState(
+            isLoading = isLoading,
+            userSummary = HomeUserSummaryUi(
+                displayName = user.displayName,
+                greeting = greeting,
+                roleLabel = roleLabel,
+                avatarUrl = user.avatarUrl,
+                initials = user.initials(),
+                notificationCount = 0
+            ),
+            xpSummary = xpSummary,
+            gpsAlarm = null,
+            aiTutorPlan = aiPlan,
+            upcomingClasses = upcomingClasses
+        )
+    }
 }
+

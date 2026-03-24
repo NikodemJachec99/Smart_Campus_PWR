@@ -56,8 +56,10 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.navigation.compose)
     implementation("com.google.android.material:material:1.13.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Import the Firebase BoM
     implementation(platform(libs.firebase.bom))

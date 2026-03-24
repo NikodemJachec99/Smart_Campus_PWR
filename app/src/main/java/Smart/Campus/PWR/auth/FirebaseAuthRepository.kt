@@ -30,7 +30,12 @@ class FirebaseAuthRepository(
         val firebaseUser = auth.currentUser ?: return null
         val uid = firebaseUser.uid
 
-        val firestoreUser = getUserByUid(uid)
+        val firestoreUser = try {
+            getUserByUid(uid)
+        } catch (_: Exception) {
+            null
+        }
+
         if (firestoreUser != null) {
             return firestoreUser
         }
@@ -48,7 +53,8 @@ class FirebaseAuthRepository(
             email = firebaseUser.email.orEmpty(),
             displayName = firebaseUser.displayName ?: AuthMapping.loginFromEmail(firebaseUser.email.orEmpty()),
             roles = fallbackRoles,
-            isActive = true
+            isActive = true,
+            avatarUrl = firebaseUser.photoUrl?.toString()
         )
     }
 
@@ -151,6 +157,8 @@ class FirebaseAuthRepository(
         val roles = AuthMapping.parseRoles(data["roles"], data["role"] as? String)
         val displayName = (data["displayName"] as? String).orEmpty().ifBlank { login }
         val isActive = data["isActive"] as? Boolean ?: true
+        val avatarUrl = (data["avatarUrl"] as? String)
+            ?: (data["photoUrl"] as? String)
 
         return AppUser(
             uid = fallbackUid,
@@ -158,7 +166,8 @@ class FirebaseAuthRepository(
             email = email,
             displayName = displayName,
             roles = roles,
-            isActive = isActive
+            isActive = isActive,
+            avatarUrl = avatarUrl
         )
     }
 }

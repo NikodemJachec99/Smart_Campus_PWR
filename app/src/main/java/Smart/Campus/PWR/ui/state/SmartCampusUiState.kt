@@ -6,7 +6,7 @@ import Smart.Campus.PWR.auth.UserRole
 enum class AppScreen {
     LOGIN,
     ROLE_PICKER,
-    ROLE_HOME,
+    MAIN_SHELL,
     ADMIN_PANEL
 }
 
@@ -32,5 +32,6 @@ data class SmartCampusUiState(
     val adminUsers: List<AppUser> = emptyList(),
     val isAdminUsersLoading: Boolean = false,
     val isAdminSubmitting: Boolean = false,
-    val createUserForm: CreateUserFormState = CreateUserFormState()
+    val createUserForm: CreateUserFormState = CreateUserFormState(),
+    val dashboardState: DashboardUiState = DashboardUiState()
 )
