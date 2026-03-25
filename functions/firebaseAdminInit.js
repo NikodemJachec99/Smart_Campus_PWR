@@ -39,6 +39,27 @@ function loadServiceAccountFromFile(filePath) {
   return parsed;
 }
 
+function findLocalServiceAccountPath() {
+  const functionsDir = __dirname;
+  const candidates = fs
+    .readdirSync(functionsDir)
+    .filter((fileName) => fileName.endsWith(".json"))
+    .filter((fileName) => fileName.includes("firebase-adminsdk"))
+    .map((fileName) => path.join(functionsDir, fileName));
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  candidates.sort((left, right) => {
+    const leftStat = fs.statSync(left);
+    const rightStat = fs.statSync(right);
+    return rightStat.mtimeMs - leftStat.mtimeMs;
+  });
+
+  return candidates[0];
+}
+
 function initializeAdminApp() {
   if (admin.apps.length > 0) {
     return admin.app();
@@ -46,9 +67,11 @@ function initializeAdminApp() {
 
   const explicitPath =
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const fallbackLocalPath = findLocalServiceAccountPath();
+  const resolvedPath = explicitPath || fallbackLocalPath;
 
-  if (explicitPath) {
-    const serviceAccount = loadServiceAccountFromFile(explicitPath);
+  if (resolvedPath) {
+    const serviceAccount = loadServiceAccountFromFile(resolvedPath);
     return admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId: serviceAccount.project_id || process.env.GOOGLE_CLOUD_PROJECT,
