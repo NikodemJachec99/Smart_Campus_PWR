@@ -2,9 +2,9 @@ package Smart.Campus.PWR.ui.state
 
 enum class DashboardTab(val route: String, val label: String) {
     HOME(DashboardRoutes.HOME, "Start"),
-    MAP(DashboardRoutes.MAP, "Mapa"),
-    CHAT(DashboardRoutes.CHAT, "Czaty"),
-    PROFILE(DashboardRoutes.PROFILE, "Profil")
+    MAP(DashboardRoutes.MAP, "Map"),
+    CHAT(DashboardRoutes.CHAT, "Chats"),
+    PROFILE(DashboardRoutes.PROFILE, "Profile")
 }
 
 object DashboardRoutes {
@@ -77,17 +77,18 @@ data class DashboardUiState(
     val xpSummary: XpSummaryUi = XpSummaryUi(
         currentXp = 0,
         targetXp = 1,
-        helperLabel = "Gamifikacja w przygotowaniu",
+        helperLabel = "Gamification in progress",
         badges = emptyList(),
         isPlaceholder = true
     ),
     val gpsAlarm: GpsAlarmUi? = null,
     val aiTutorPlan: AiTutorPlanUi? = null,
     val quickActions: List<QuickActionUi> = listOf(
-        QuickActionUi(QuickActionType.MAP, "Mapa PWr", DashboardRoutes.MAP),
+        QuickActionUi(QuickActionType.MAP, "Map PWr", DashboardRoutes.MAP),
         QuickActionUi(QuickActionType.CHAT, "PWr Chat", DashboardRoutes.CHAT),
-        QuickActionUi(QuickActionType.EXCHANGE, "Wymiana", DashboardRoutes.EXCHANGE),
-        QuickActionUi(QuickActionType.SCHEDULE, "Plan zajec", DashboardRoutes.SCHEDULE)
+        QuickActionUi(QuickActionType.EXCHANGE, "Exchange", DashboardRoutes.EXCHANGE),
+        QuickActionUi(QuickActionType.SCHEDULE, "Class Schedule", DashboardRoutes.SCHEDULE)
     ),
     val upcomingClasses: List<UpcomingClassUi> = emptyList()
 )
+

@@ -68,7 +68,7 @@ class SmartCampusViewModel(
     fun login() {
         val state = _uiState.value
         if (state.loginInput.isBlank() || state.passwordInput.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Podaj login i haslo.") }
+            _uiState.update { it.copy(errorMessage = "Enter login and password.") }
             return
         }
 
@@ -93,7 +93,7 @@ class SmartCampusViewModel(
                 screen = AppScreen.LOGIN,
                 loginInput = it.loginInput,
                 passwordInput = "",
-                infoMessage = "Wylogowano."
+                infoMessage = "Signed out."
             )
         }
     }
@@ -101,7 +101,7 @@ class SmartCampusViewModel(
     fun selectRole(role: UserRole) {
         val currentUser = _uiState.value.currentUser ?: return
         if (!currentUser.hasRole(role)) {
-            _uiState.update { it.copy(errorMessage = "Brak uprawnien do tej roli.") }
+            _uiState.update { it.copy(errorMessage = "No permission for this role.") }
             return
         }
 
@@ -160,12 +160,12 @@ class SmartCampusViewModel(
         val form = _uiState.value.createUserForm
 
         if (!form.admin && !form.student && !form.lecturer) {
-            _uiState.update { it.copy(errorMessage = "Zaznacz co najmniej jedna role.") }
+            _uiState.update { it.copy(errorMessage = "Select at least one role.") }
             return
         }
 
         if (form.login.isBlank() || form.password.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Login i haslo sa wymagane.") }
+            _uiState.update { it.copy(errorMessage = "Login and password are required.") }
             return
         }
 
@@ -186,7 +186,7 @@ class SmartCampusViewModel(
                     it.copy(
                         isAdminSubmitting = false,
                         adminUsers = users,
-                        infoMessage = "Uzytkownik zostal dodany.",
+                        infoMessage = "User has been added.",
                         createUserForm = CreateUserFormState()
                     )
                 }
@@ -200,7 +200,7 @@ class SmartCampusViewModel(
 
     fun updateUserRolesByAdmin(uid: String, student: Boolean, lecturer: Boolean) {
         if (!student && !lecturer) {
-            _uiState.update { it.copy(errorMessage = "Uzytkownik musi miec przynajmniej jedna role nie-admin.") }
+            _uiState.update { it.copy(errorMessage = "User must have at least one non-admin role.") }
             return
         }
 
@@ -213,7 +213,7 @@ class SmartCampusViewModel(
                     it.copy(
                         isAdminSubmitting = false,
                         adminUsers = users,
-                        infoMessage = "Role zostaly zaktualizowane."
+                        infoMessage = "Roles have been updated."
                     )
                 }
             } catch (error: Throwable) {
@@ -302,7 +302,7 @@ class SmartCampusViewModel(
                         screen = AppScreen.LOGIN,
                         currentUser = null,
                         activeRole = null,
-                        errorMessage = "Brak przypisanej roli dla konta."
+                        errorMessage = "No role assigned to this account."
                     )
                 }
             }
@@ -364,36 +364,36 @@ class SmartCampusViewModel(
         isLoading: Boolean
     ): DashboardUiState {
         val roleLabel = when (activeRole) {
-            UserRole.STUDENT -> "Tryb Student"
-            UserRole.LECTURER -> "Tryb Wykladowca"
-            UserRole.ADMIN -> "Tryb Admin"
+            UserRole.STUDENT -> "Student mode"
+            UserRole.LECTURER -> "Lecturer mode"
+            UserRole.ADMIN -> "Admin mode"
         }
 
         val greeting = when (activeRole) {
-            UserRole.STUDENT -> "Dzien dobry,"
-            UserRole.LECTURER -> "Witaj ponownie,"
-            UserRole.ADMIN -> "Witaj,"
+            UserRole.STUDENT -> "Good morning,"
+            UserRole.LECTURER -> "Welcome back,"
+            UserRole.ADMIN -> "Welcome,"
         }
 
         val xpSummary = when (activeRole) {
             UserRole.STUDENT -> XpSummaryUi(
                 currentXp = 1250,
                 targetXp = 2000,
-                helperLabel = "Modul gamifikacji jest w wersji demonstracyjnej",
+                helperLabel = "Gamification module is in demo mode.",
                 badges = listOf("XP", "AI"),
                 isPlaceholder = true
             )
             UserRole.LECTURER -> XpSummaryUi(
                 currentXp = 890,
                 targetXp = 1500,
-                helperLabel = "Statystyki aktywnosci prowadzacego sa w przygotowaniu",
+                helperLabel = "Lecturer activity statistics are in progress.",
                 badges = listOf("LE", "AI"),
                 isPlaceholder = true
             )
             UserRole.ADMIN -> XpSummaryUi(
                 currentXp = 0,
                 targetXp = 1,
-                helperLabel = "Dashboard admina pozostaje osobnym ekranem",
+                helperLabel = "Admin dashboard remains a separate screen.",
                 badges = emptyList(),
                 isPlaceholder = true
             )
@@ -401,17 +401,17 @@ class SmartCampusViewModel(
 
         val aiPlan = when (activeRole) {
             UserRole.STUDENT -> AiTutorPlanUi(
-                title = "AI Tutor: Twoj plan na dzis",
-                description = "Podlacz modul AI, aby otrzymywac zadania dopasowane do Twojego poziomu i terminow.",
-                taskTitle = "Brak aktywnego planu AI",
-                estimatedTimeLabel = "Oczekuje na integracje",
+                title = "AI Tutor: your plan for today",
+                description = "Connect the AI module to get tasks tailored to your level and deadlines.",
+                taskTitle = "No active AI plan",
+                estimatedTimeLabel = "Waiting for integration",
                 isPlaceholder = true
             )
             UserRole.LECTURER -> AiTutorPlanUi(
-                title = "AI Assistant: wsparcie prowadzacego",
-                description = "Tutaj pojawia sie rekomendacje materialow, streszczenia zajec i wskazowki dla grup.",
-                taskTitle = "Brak aktywnych rekomendacji",
-                estimatedTimeLabel = "Oczekuje na integracje",
+                title = "AI Assistant: lecturer support",
+                description = "Recommendations, class summaries, and group tips will appear here.",
+                taskTitle = "No active recommendations",
+                estimatedTimeLabel = "Waiting for integration",
                 isPlaceholder = true
             )
             UserRole.ADMIN -> null
@@ -434,4 +434,5 @@ class SmartCampusViewModel(
         )
     }
 }
+
 

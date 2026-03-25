@@ -189,26 +189,26 @@ class FirebaseAuthRepository(
 
     fun userMessage(error: Throwable): String {
         return when (error) {
-            is TimeoutCancellationException -> "Logowanie przekroczylo limit czasu. Sprawdz emulator, Google Play Services lub sprobuj na fizycznym urzadzeniu."
-            is FirebaseAuthInvalidCredentialsException -> "Nieprawidlowy login lub haslo."
-            is FirebaseAuthInvalidUserException -> "Uzytkownik nie istnieje w Firebase Auth."
+            is TimeoutCancellationException -> "Sign-in timed out. Check emulator, Google Play Services, or try a physical device."
+            is FirebaseAuthInvalidCredentialsException -> "Invalid login or password."
+            is FirebaseAuthInvalidUserException -> "User does not exist in Firebase Auth."
             is FirebaseAuthException -> when (error.errorCode) {
                 "ERROR_INVALID_LOGIN_CREDENTIALS", "ERROR_WRONG_PASSWORD", "ERROR_INVALID_CREDENTIAL" ->
-                    "Nieprawidlowy login lub haslo."
-                "ERROR_USER_NOT_FOUND" -> "Uzytkownik nie istnieje w Firebase Auth."
-                "ERROR_NETWORK_REQUEST_FAILED" -> "Problem z polaczeniem sieciowym lub Google Play Services."
-                "ERROR_TOO_MANY_REQUESTS" -> "Za duzo prob logowania. Sprobuj ponownie za chwile."
-                else -> "Blad logowania Firebase: ${error.errorCode}"
+                    "Invalid login or password."
+                "ERROR_USER_NOT_FOUND" -> "User does not exist in Firebase Auth."
+                "ERROR_NETWORK_REQUEST_FAILED" -> "Network issue or Google Play Services problem."
+                "ERROR_TOO_MANY_REQUESTS" -> "Too many sign-in attempts. Try again shortly."
+                else -> "Firebase sign-in error: ${error.errorCode}"
             }
             is FirebaseFunctionsException -> when (error.code) {
-                FirebaseFunctionsException.Code.NOT_FOUND -> "Funkcja backendowa nie zostala znaleziona. Dziala fallback lokalny admin panelu."
-                FirebaseFunctionsException.Code.PERMISSION_DENIED -> "Brak uprawnien admina do tej operacji."
-                FirebaseFunctionsException.Code.UNAUTHENTICATED -> "Sesja wygasla. Zaloguj sie ponownie."
-                FirebaseFunctionsException.Code.UNAVAILABLE -> "Backend Functions jest chwilowo niedostepny."
-                else -> "Blad Functions: ${error.code.name}"
+                FirebaseFunctionsException.Code.NOT_FOUND -> "Backend function not found. Admin panel local fallback is active."
+                FirebaseFunctionsException.Code.PERMISSION_DENIED -> "No admin permission for this operation."
+                FirebaseFunctionsException.Code.UNAUTHENTICATED -> "Session expired. Sign in again."
+                FirebaseFunctionsException.Code.UNAVAILABLE -> "Functions backend is temporarily unavailable."
+                else -> "Functions error: ${error.code.name}"
             }
-            is FirebaseFirestoreException -> "Blad Firestore: ${error.code.name}"
-            else -> error.message ?: "Wystapil nieoczekiwany blad."
+            is FirebaseFirestoreException -> "Firestore error: ${error.code.name}"
+            else -> error.message ?: "Unexpected error occurred."
         }
     }
 
@@ -231,7 +231,7 @@ class FirebaseAuthRepository(
         lecturer: Boolean
     ): AppUser {
         if (password.length < 6) {
-            throw IllegalArgumentException("Haslo musi miec co najmniej 6 znakow.")
+            throw IllegalArgumentException("Password must be at least 6 characters.")
         }
 
         val roles = mutableListOf<String>()
@@ -240,7 +240,7 @@ class FirebaseAuthRepository(
         if (lecturer) roles.add("lecturer")
 
         if (roles.isEmpty()) {
-            throw IllegalArgumentException("Zaznacz co najmniej jedna role.")
+            throw IllegalArgumentException("Select at least one role.")
         }
 
         val email = "$normalizedLogin@$LOGIN_DOMAIN"
@@ -262,24 +262,24 @@ class FirebaseAuthRepository(
         firestore.collection("users").document(uid).set(userDoc, SetOptions.merge()).await()
 
         return requireNotNull(getUserByUid(uid)) {
-            "Uzytkownik utworzony, ale brak profilu Firestore."
+            "User created, but Firestore profile is missing."
         }
     }
 
     private suspend fun updateUserRolesViaFirestore(uid: String, student: Boolean, lecturer: Boolean): Set<UserRole> {
         if (!student && !lecturer) {
-            throw IllegalArgumentException("Uzytkownik musi miec przynajmniej jedna role nie-admin.")
+            throw IllegalArgumentException("User must have at least one non-admin role.")
         }
 
         val userRef = firestore.collection("users").document(uid)
         val snapshot = userRef.get().await()
         if (!snapshot.exists()) {
-            throw IllegalStateException("Profil uzytkownika nie istnieje w Firestore.")
+            throw IllegalStateException("User profile does not exist in Firestore.")
         }
 
         val existingRoles = AuthMapping.parseRoles(snapshot.get("roles"), snapshot.getString("role"))
         if (existingRoles.contains(UserRole.ADMIN)) {
-            throw IllegalStateException("Roli admin nie mozna zmieniac z tego panelu.")
+            throw IllegalStateException("Admin role cannot be changed from this panel.")
         }
 
         val roles = buildList {
@@ -300,7 +300,7 @@ class FirebaseAuthRepository(
 
     private suspend fun createEmailPasswordUserViaRest(email: String, password: String, displayName: String): String {
         val apiKey = FirebaseApp.getInstance().options.apiKey
-            ?: throw IllegalStateException("Brak API key Firebase w konfiguracji aplikacji.")
+            ?: throw IllegalStateException("Missing Firebase API key in app configuration.")
 
         val endpoint = "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey"
         val body = JSONObject()
@@ -352,13 +352,13 @@ class FirebaseAuthRepository(
             val root = JSONObject(rawResponse)
             val message = root.optJSONObject("error")?.optString("message") ?: "UNKNOWN"
             when (message) {
-                "EMAIL_EXISTS" -> "Uzytkownik z takim loginem/email juz istnieje."
-                "INVALID_PASSWORD" -> "Haslo jest nieprawidlowe."
-                "WEAK_PASSWORD : Password should be at least 6 characters" -> "Haslo musi miec co najmniej 6 znakow."
-                else -> "Blad tworzenia uzytkownika: $message"
+                "EMAIL_EXISTS" -> "User with this login/email already exists."
+                "INVALID_PASSWORD" -> "Password is invalid."
+                "WEAK_PASSWORD : Password should be at least 6 characters" -> "Password must be at least 6 characters."
+                else -> "User creation error: $message"
             }
         } catch (_: Exception) {
-            "Blad tworzenia uzytkownika."
+            "User creation error."
         }
     }
 
@@ -418,3 +418,4 @@ class FirebaseAuthRepository(
         )
     }
 }
+

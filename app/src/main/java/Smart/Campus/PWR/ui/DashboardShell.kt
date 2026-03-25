@@ -102,9 +102,9 @@ import coil.compose.AsyncImage
 
 private enum class AdminShellTab(val route: String, val label: String, val icon: ImageVector) {
     ADMIN("admin_home", "Admin", Icons.Rounded.Shield),
-    MAP(DashboardRoutes.MAP, "Mapa", Icons.Rounded.Map),
-    CHAT(DashboardRoutes.CHAT, "Czaty", Icons.Rounded.ChatBubbleOutline),
-    PROFILE(DashboardRoutes.PROFILE, "Profil", Icons.Rounded.Person)
+    MAP(DashboardRoutes.MAP, "Map", Icons.Rounded.Map),
+    CHAT(DashboardRoutes.CHAT, "Chats", Icons.Rounded.ChatBubbleOutline),
+    PROFILE(DashboardRoutes.PROFILE, "Profile", Icons.Rounded.Person)
 }
 
 @Composable
@@ -180,21 +180,21 @@ fun AdminShellScreen(
                 )
             }
             composable(AdminShellTab.MAP.route) {
-                ModulePlaceholderScreen(Icons.Rounded.Map, "Mapa PWr", "Modul mapy jest gotowy pod przyszla integracje z trasami i salami.")
+                ModulePlaceholderScreen(Icons.Rounded.Map, "Map PWr", "Map module is ready for future integration with routes and rooms.")
             }
             composable(AdminShellTab.CHAT.route) {
-                ModulePlaceholderScreen(Icons.Rounded.Forum, "PWr Chat", "Tutaj pojawia sie czaty grupowe i komunikacja kampusowa.")
+                ModulePlaceholderScreen(Icons.Rounded.Forum, "PWr Chat", "Group chats and campus communication will appear here.")
             }
             composable(AdminShellTab.PROFILE.route) {
                 if (currentUser != null) {
-                    ProfileScreen(
+                    ProfileeScreen(
                         currentUser = currentUser,
                         activeRole = UserRole.ADMIN,
                         onOpenRolePicker = {},
                         onLogout = onLogout
                     )
                 } else {
-                    ModulePlaceholderScreen(Icons.Rounded.Person, "Profil", "Trwa ladowanie danych administratora.")
+                    ModulePlaceholderScreen(Icons.Rounded.Person, "Profile", "Loading administrator data.")
                 }
             }
         }
@@ -258,12 +258,12 @@ fun MainShellScreen(
                     onQuickAction = { route -> navController.navigate(route) { launchSingleTop = true } }
                 )
             }
-            composable(DashboardRoutes.MAP) { ModulePlaceholderScreen(Icons.Rounded.Map, "Mapa PWr", "Modul mapy jest gotowy pod przyszla integracje z trasami i salami.") }
-            composable(DashboardRoutes.CHAT) { ModulePlaceholderScreen(Icons.Rounded.Forum, "PWr Chat", "Tutaj pojawia sie czaty grupowe i komunikacja kampusowa.") }
-            composable(DashboardRoutes.EXCHANGE) { ModulePlaceholderScreen(Icons.Rounded.SwapHoriz, "Wymiana plikow", "Placeholder modulu wymiany materialow.") }
-            composable(DashboardRoutes.SCHEDULE) { ModulePlaceholderScreen(Icons.Rounded.CalendarMonth, "Plan zajec", "Rozszerzony harmonogram pojawi sie tutaj.") }
+            composable(DashboardRoutes.MAP) { ModulePlaceholderScreen(Icons.Rounded.Map, "Map PWr", "Map module is ready for future integration with routes and rooms.") }
+            composable(DashboardRoutes.CHAT) { ModulePlaceholderScreen(Icons.Rounded.Forum, "PWr Chat", "Group chats and campus communication will appear here.") }
+            composable(DashboardRoutes.EXCHANGE) { ModulePlaceholderScreen(Icons.Rounded.SwapHoriz, "File Exchange", "Placeholder for material exchange module.") }
+            composable(DashboardRoutes.SCHEDULE) { ModulePlaceholderScreen(Icons.Rounded.CalendarMonth, "Class Schedule", "Extended timetable will appear here.") }
             composable(DashboardRoutes.PROFILE) {
-                ProfileScreen(currentUser = currentUser, activeRole = activeRole, onOpenRolePicker = onOpenRolePicker, onLogout = onLogout)
+                ProfileeScreen(currentUser = currentUser, activeRole = activeRole, onOpenRolePicker = onOpenRolePicker, onLogout = onLogout)
             }
         }
     }
@@ -287,9 +287,9 @@ private fun DashboardHomeScreen(
         item { GpsCard(state = state) }
         item { AiCard(state = state) }
         item { QuickActions(actions = state.quickActions, onQuickAction = onQuickAction) }
-        item { SectionHeader(title = "Dalsze zajecia", actionLabel = if (state.isLoading) "Odswiezanie..." else "Odswiez", onAction = onRefreshDashboard) }
+        item { SectionHeader(title = "Upcoming classes", actionLabel = if (state.isLoading) "Odswiezanie..." else "Odswiez", onAction = onRefreshDashboard) }
         if (state.upcomingClasses.isEmpty()) {
-            item { EmptyCard(Icons.Rounded.Schedule, "Brak nadchodzacych zajec", "Po pojawieniu sie danych w kolekcji classes zobaczysz je tutaj automatycznie.") }
+            item { EmptyCard(Icons.Rounded.Schedule, "No upcoming classes", "Once data appears in the classes collection, it will show up here automatically.") }
         } else {
             items(state.upcomingClasses, key = { it.id }) { classItem ->
                 UpcomingClassCard(classItem)
@@ -302,9 +302,9 @@ private fun DashboardHomeScreen(
 private fun HomeHeader(state: DashboardUiState, currentUser: AppUser, activeRole: UserRole) {
     val summary = state.userSummary
     val roleLabel = summary?.roleLabel ?: when (activeRole) {
-        UserRole.STUDENT -> "Tryb Student"
-        UserRole.LECTURER -> "Tryb Wykladowca"
-        UserRole.ADMIN -> "Tryb Admin"
+        UserRole.STUDENT -> "Student mode"
+        UserRole.LECTURER -> "Lecturer mode"
+        UserRole.ADMIN -> "Admin mode"
     }
 
     Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = Color.Transparent)) {
@@ -319,14 +319,14 @@ private fun HomeHeader(state: DashboardUiState, currentUser: AppUser, activeRole
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         AvatarBubble(summary?.avatarUrl ?: currentUser.avatarUrl, summary?.initials ?: currentUser.initials())
                         Column {
-                            Text(summary?.greeting ?: "Dzien dobry,", color = PwrBlueSoft)
+                            Text(summary?.greeting ?: "Good morning,", color = PwrBlueSoft)
                             Text(summary?.displayName ?: currentUser.displayName, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
                             ElevatedAssistChip(onClick = {}, enabled = false, label = { Text(roleLabel, color = PwrNavy) }, modifier = Modifier.padding(top = 8.dp))
                         }
                     }
                     Box {
                         IconButton(onClick = {}, modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.14f))) {
-                            Icon(Icons.Rounded.NotificationsNone, contentDescription = "Powiadomienia", tint = Color.White)
+                            Icon(Icons.Rounded.NotificationsNone, contentDescription = "Notifications", tint = Color.White)
                         }
                         if ((summary?.notificationCount ?: 0) > 0) {
                             Badge(modifier = Modifier.align(Alignment.TopEnd), containerColor = PwrRed) { Text((summary?.notificationCount ?: 0).toString()) }
@@ -364,7 +364,7 @@ private fun XpCard(state: DashboardUiState) {
                         Icon(Icons.Rounded.Bolt, contentDescription = null, tint = WarningText)
                     }
                     Column {
-                        Text("Twoj poziom", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text("Your level", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         Text("${xp.currentXp} XP / ${xp.targetXp} XP", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = TextPrimary)
                     }
                 }
@@ -391,8 +391,8 @@ private fun GpsCard(state: DashboardUiState) {
                 Icon(if (alarm == null) Icons.Rounded.Explore else Icons.Rounded.Shield, contentDescription = null, tint = textColor)
             }
             Column {
-                Text(alarm?.let { "Wyjdz za ${it.minutesUntilLeave} minut" } ?: "Alarm GPS gotowy na integracje", color = textColor, fontWeight = FontWeight.Bold)
-                Text(alarm?.courseTitle ?: "Karta pojawi sie, gdy dojdzie integracja trasy i czasu przejscia.", color = textColor, style = MaterialTheme.typography.bodyMedium)
+                Text(alarm?.let { "Leave in ${it.minutesUntilLeave} minutes" } ?: "GPS alarm ready for integration", color = textColor, fontWeight = FontWeight.Bold)
+                Text(alarm?.courseTitle ?: "This card will appear when route and travel-time integration is added.", color = textColor, style = MaterialTheme.typography.bodyMedium)
                 if (alarm != null) {
                     Text(alarm.locationLabel, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
                 }
@@ -413,9 +413,9 @@ private fun AiCard(state: DashboardUiState) {
                     }
                     Text(ai?.title ?: "AI Tutor", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
-                TextButton(onClick = {}) { Text("Zobacz") }
+                TextButton(onClick = {}) { Text("View") }
             }
-            Text(ai?.description ?: "Sekcja AI jest gotowa na dane. Po integracji pojawia sie tu plan nauki lub wsparcia dla prowadzacego.", color = TextSecondary, modifier = Modifier.padding(top = 10.dp))
+            Text(ai?.description ?: "AI section is ready for data. After integration, a study plan or lecturer support will appear here.", color = TextSecondary, modifier = Modifier.padding(top = 10.dp))
             Surface(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), color = AppSurfaceMuted, shape = RoundedCornerShape(22.dp)) {
                 Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -423,8 +423,8 @@ private fun AiCard(state: DashboardUiState) {
                             Icon(Icons.Rounded.Description, contentDescription = null, tint = Color.White)
                         }
                         Column {
-                            Text(ai?.taskTitle ?: "Brak aktywnego planu AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(ai?.estimatedTimeLabel ?: "Oczekuje na integracje", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                            Text(ai?.taskTitle ?: "No active AI plan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(ai?.estimatedTimeLabel ?: "Waiting for integration", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         }
                     }
                     Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
@@ -439,7 +439,7 @@ private fun AiCard(state: DashboardUiState) {
 @Composable
 private fun QuickActions(actions: List<QuickActionUi>, onQuickAction: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Szybki dostep", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Quick access", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             actions.forEach { action ->
                 val config = when (action.type) {
@@ -507,7 +507,7 @@ private fun UpcomingClassCard(classItem: UpcomingClassUi) {
 }
 
 @Composable
-private fun ProfileScreen(currentUser: AppUser, activeRole: UserRole, onOpenRolePicker: () -> Unit, onLogout: () -> Unit) {
+private fun ProfileeScreen(currentUser: AppUser, activeRole: UserRole, onOpenRolePicker: () -> Unit, onLogout: () -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = PwrNavy)) {
@@ -522,7 +522,7 @@ private fun ProfileScreen(currentUser: AppUser, activeRole: UserRole, onOpenRole
                     ElevatedAssistChip(
                         onClick = {},
                         enabled = false,
-                        label = { Text(when (activeRole) { UserRole.STUDENT -> "Tryb Student"; UserRole.LECTURER -> "Tryb Wykladowca"; UserRole.ADMIN -> "Tryb Admin" }, color = PwrNavy) },
+                        label = { Text(when (activeRole) { UserRole.STUDENT -> "Student mode"; UserRole.LECTURER -> "Lecturer mode"; UserRole.ADMIN -> "Admin mode" }, color = PwrNavy) },
                         modifier = Modifier.padding(top = 16.dp)
                     )
                 }
@@ -531,24 +531,24 @@ private fun ProfileScreen(currentUser: AppUser, activeRole: UserRole, onOpenRole
         item {
             Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Profil i ustawienia", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Ta zakladka jest placeholderem pod przyszle ustawienia i preferencje kampusu.", color = TextSecondary)
+                    Text("Profile i ustawienia", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("This tab is a placeholder for future settings and campus preferences.", color = TextSecondary)
                     if (currentUser.hasDualRole()) {
                         OutlinedButton(onClick = onOpenRolePicker, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Rounded.SwapHoriz, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Przelacz role")
+                            Text("Switch role")
                         }
                     }
                     OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Rounded.Logout, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Wyloguj")
+                        Text("Sign out")
                     }
                 }
             }
         }
-        item { EmptyCard(Icons.Rounded.WorkspacePremium, "Sekcje profilu w przygotowaniu", "Tutaj pojawia sie osiagniecia, ustawienia powiadomien i szczegoly konta.") }
+        item { EmptyCard(Icons.Rounded.WorkspacePremium, "Profile sections in progress", "Achievements, notification settings, and account details will appear here.") }
     }
 }
 
@@ -578,6 +578,8 @@ private fun DashboardTab.icon(): ImageVector = when (this) {
     DashboardTab.CHAT -> Icons.Rounded.ChatBubbleOutline
     DashboardTab.PROFILE -> Icons.Rounded.Person
 }
+
+
 
 
 

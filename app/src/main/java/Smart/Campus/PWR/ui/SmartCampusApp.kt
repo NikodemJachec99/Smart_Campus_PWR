@@ -133,7 +133,7 @@ private fun LoadingScreen() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CircularProgressIndicator(color = Color.White)
-                    Text("Ladowanie Smart Campus PWR...", color = Color.White)
+                    Text("Loading Smart Campus PWR...", color = Color.White)
                 }
             }
         }
@@ -174,7 +174,7 @@ private fun LoginScreen(
                 ) {
                     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text("Logowanie", style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
-                        Text("Zaloguj sie aliasem lub adresem email, aby przejsc do panelu PWr.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                        Text("Sign in with an alias or email to access the PWr panel.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
 
                         OutlinedTextField(
                             value = state.loginInput,
@@ -183,7 +183,7 @@ private fun LoginScreen(
                                 onLoginChanged(it)
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Login lub email") },
+                            label = { Text("Login or email") },
                             singleLine = true
                         )
 
@@ -194,7 +194,7 @@ private fun LoginScreen(
                                 onPasswordChanged(it)
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Haslo") },
+                            label = { Text("Password") },
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation()
                         )
@@ -212,10 +212,10 @@ private fun LoginScreen(
                         }
 
                         Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy) {
-                            Text(if (state.isBusy) "Logowanie..." else "Zaloguj")
+                            Text(if (state.isBusy) "Signing in..." else "Sign in")
                         }
 
-                        Text("Test admin: login admin / haslo admin123", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text("Test admin: login admin / password admin123", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
             }
@@ -240,16 +240,16 @@ private fun RolePickerScreen(
         ) {
             Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = PwrNavy)) {
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Wybierz aktywna role", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                    Text("Choose active role", color = Color.White, style = MaterialTheme.typography.headlineSmall)
                     Text(state.currentUser?.displayName.orEmpty(), color = PwrBlueSoft)
                 }
             }
 
             Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface), modifier = Modifier.padding(top = 16.dp)) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onStudentClick, modifier = Modifier.fillMaxWidth()) { Text("Kontynuuj jako Student") }
-                    Button(onClick = onLecturerClick, modifier = Modifier.fillMaxWidth()) { Text("Kontynuuj jako Wykladowca") }
-                    OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Wyloguj") }
+                    Button(onClick = onStudentClick, modifier = Modifier.fillMaxWidth()) { Text("Continue as Student") }
+                    Button(onClick = onLecturerClick, modifier = Modifier.fillMaxWidth()) { Text("Continue as Lecturer") }
+                    OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Sign out") }
                 }
             }
         }
@@ -282,13 +282,13 @@ fun AdminPanelScreen(
             item {
                 Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = PwrNavy)) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Panel Admin", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                        Text("Admin Panel", color = Color.White, style = MaterialTheme.typography.headlineSmall)
                         Text(state.currentUser?.displayName.orEmpty(), color = PwrBlueSoft)
                         Row(modifier = Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(onClick = onRefresh, enabled = !state.isAdminUsersLoading && !state.isAdminSubmitting) {
-                                Text(if (state.isAdminUsersLoading) "Odswiezanie..." else "Odswiez")
+                                Text(if (state.isAdminUsersLoading) "Refreshanie..." else "Refresh")
                             }
-                            OutlinedButton(onClick = onLogout) { Text("Wyloguj") }
+                            OutlinedButton(onClick = onLogout) { Text("Sign out") }
                         }
                     }
                 }
@@ -343,13 +343,13 @@ fun AdminPanelScreen(
             }
 
             item {
-                Text("Uzytkownicy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Users", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
 
             if (state.adminUsers.isEmpty() && !state.isAdminUsersLoading) {
                 item {
                     Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
-                        Text("Brak uzytkownikow.", modifier = Modifier.padding(16.dp), color = TextSecondary)
+                        Text("No users.", modifier = Modifier.padding(16.dp), color = TextSecondary)
                     }
                 }
             }
@@ -375,11 +375,11 @@ private fun CreateUserCard(
 ) {
     Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Dodaj nowego uzytkownika", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Haslo musi miec co najmniej 6 znakow.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            Text("Add new user", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Password must be at least 6 characters.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
 
             OutlinedTextField(value = form.login, onValueChange = onCreateLoginChanged, modifier = Modifier.fillMaxWidth(), label = { Text("Login") }, singleLine = true, enabled = !isSubmitting)
-            OutlinedTextField(value = form.password, onValueChange = onCreatePasswordChanged, modifier = Modifier.fillMaxWidth(), label = { Text("Haslo") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), enabled = !isSubmitting)
+            OutlinedTextField(value = form.password, onValueChange = onCreatePasswordChanged, modifier = Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), enabled = !isSubmitting)
             OutlinedTextField(value = form.displayName, onValueChange = onCreateDisplayNameChanged, modifier = Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, enabled = !isSubmitting)
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -389,7 +389,7 @@ private fun CreateUserCard(
             }
 
             Button(onClick = onCreateUserClick, modifier = Modifier.fillMaxWidth(), enabled = !isSubmitting) {
-                Text(if (isSubmitting) "Tworzenie..." else "Dodaj uzytkownika")
+                Text(if (isSubmitting) "Creating..." else "Add user")
             }
         }
     }
@@ -425,7 +425,7 @@ private fun UserRow(
             }
 
             if (isAdminUser) {
-                Text("Rola admin nie jest edytowalna z panelu.", color = PwrNavy, style = MaterialTheme.typography.bodySmall)
+                Text("Admin role cannot be edited from this panel.", color = PwrNavy, style = MaterialTheme.typography.bodySmall)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = student, onCheckedChange = { student = it }, enabled = !isSubmitting)
@@ -435,12 +435,13 @@ private fun UserRow(
                     Text("Lecturer")
                     Spacer(modifier = Modifier.weight(1f))
                     Button(onClick = { onUpdateUserRoles(user.uid, student, lecturer) }, enabled = !isSubmitting && changed && (student || lecturer)) {
-                        Text("Zapisz")
+                        Text("Save")
                     }
                 }
             }
         }
     }
 }
+
 
 
