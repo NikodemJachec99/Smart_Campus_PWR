@@ -1,94 +1,88 @@
 package Smart.Campus.PWR.ui.state
 
 enum class DashboardTab(val route: String, val label: String) {
-    HOME(DashboardRoutes.HOME, "Start"),
-    MAP(DashboardRoutes.MAP, "Map"),
-    CHAT(DashboardRoutes.CHAT, "Chats"),
+    HOME(DashboardRoutes.HOME, "Home"),
+    CALENDAR(DashboardRoutes.CALENDAR, "Calendar"),
+    REVIEWS(DashboardRoutes.REVIEWS, "Reviews"),
     PROFILE(DashboardRoutes.PROFILE, "Profile")
 }
 
 object DashboardRoutes {
     const val HOME = "home"
-    const val MAP = "map"
-    const val CHAT = "chat"
+    const val CALENDAR = "calendar"
+    const val REVIEWS = "reviews"
     const val PROFILE = "profile"
-    const val EXCHANGE = "exchange"
-    const val SCHEDULE = "schedule"
 }
 
-enum class QuickActionType {
-    MAP,
-    CHAT,
-    EXCHANGE,
-    SCHEDULE
-}
-
-data class HomeUserSummaryUi(
-    val displayName: String,
-    val greeting: String,
-    val roleLabel: String,
-    val avatarUrl: String? = null,
-    val initials: String,
-    val notificationCount: Int = 0
-)
-
-data class XpSummaryUi(
-    val currentXp: Int,
-    val targetXp: Int,
-    val helperLabel: String,
-    val badges: List<String>,
-    val isPlaceholder: Boolean
-)
-
-data class GpsAlarmUi(
-    val minutesUntilLeave: Int,
-    val courseTitle: String,
-    val locationLabel: String,
-    val helperLabel: String
-)
-
-data class AiTutorPlanUi(
-    val title: String,
-    val description: String,
-    val taskTitle: String,
-    val estimatedTimeLabel: String,
-    val isPlaceholder: Boolean
-)
-
-data class QuickActionUi(
-    val type: QuickActionType,
-    val label: String,
-    val route: String?
-)
-
-data class UpcomingClassUi(
+data class TutorAvailabilityUi(
     val id: String,
-    val timeLabel: String,
-    val durationLabel: String,
-    val title: String,
-    val typeLabel: String,
-    val roomLabel: String,
-    val startsAtMillis: Long
+    val tutorId: String,
+    val tutorDisplayName: String,
+    val subject: String,
+    val dateLabel: String,
+    val startHour: Int,
+    val endHour: Int,
+    val isBooked: Boolean
+) {
+    val timeLabel: String
+        get() = "%02d:00 - %02d:00".format(startHour, endHour)
+}
+
+data class LessonBookingUi(
+    val id: String,
+    val tutorId: String,
+    val tutorDisplayName: String,
+    val studentId: String,
+    val studentDisplayName: String,
+    val subject: String,
+    val dateLabel: String,
+    val startHour: Int,
+    val endHour: Int,
+    val status: String
+) {
+    val timeLabel: String
+        get() = "%02d:00 - %02d:00".format(startHour, endHour)
+}
+
+data class TutorReviewUi(
+    val id: String,
+    val tutorId: String,
+    val tutorDisplayName: String,
+    val studentId: String,
+    val studentDisplayName: String,
+    val rating: Int,
+    val comment: String,
+    val createdAtLabel: String
+)
+
+data class TutorReportUi(
+    val id: String,
+    val tutorId: String,
+    val tutorDisplayName: String,
+    val studentId: String,
+    val studentDisplayName: String,
+    val reason: String,
+    val details: String,
+    val status: String,
+    val createdAtLabel: String
+)
+
+data class TutorSummaryUi(
+    val uid: String,
+    val displayName: String,
+    val subjects: String
 )
 
 data class DashboardUiState(
     val isLoading: Boolean = false,
-    val userSummary: HomeUserSummaryUi? = null,
-    val xpSummary: XpSummaryUi = XpSummaryUi(
-        currentXp = 0,
-        targetXp = 1,
-        helperLabel = "Gamification in progress",
-        badges = emptyList(),
-        isPlaceholder = true
-    ),
-    val gpsAlarm: GpsAlarmUi? = null,
-    val aiTutorPlan: AiTutorPlanUi? = null,
-    val quickActions: List<QuickActionUi> = listOf(
-        QuickActionUi(QuickActionType.MAP, "Map PWr", DashboardRoutes.MAP),
-        QuickActionUi(QuickActionType.CHAT, "PWr Chat", DashboardRoutes.CHAT),
-        QuickActionUi(QuickActionType.EXCHANGE, "Exchange", DashboardRoutes.EXCHANGE),
-        QuickActionUi(QuickActionType.SCHEDULE, "Class Schedule", DashboardRoutes.SCHEDULE)
-    ),
-    val upcomingClasses: List<UpcomingClassUi> = emptyList()
+    val notificationCount: Int = 0,
+    val myStudentBookings: List<LessonBookingUi> = emptyList(),
+    val myTutorBookings: List<LessonBookingUi> = emptyList(),
+    val myAvailability: List<TutorAvailabilityUi> = emptyList(),
+    val availableTutorSlots: List<TutorAvailabilityUi> = emptyList(),
+    val tutors: List<TutorSummaryUi> = emptyList(),
+    val reviewsByMe: List<TutorReviewUi> = emptyList(),
+    val reviewsForMe: List<TutorReviewUi> = emptyList(),
+    val reportsByMe: List<TutorReportUi> = emptyList(),
+    val adminReports: List<TutorReportUi> = emptyList()
 )
-

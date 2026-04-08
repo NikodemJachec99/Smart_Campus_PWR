@@ -43,9 +43,9 @@ function toRoleArray(rolePayload, { allowAdmin = false } = {}) {
 
   const adminRole = allowAdmin && rolePayload.admin === true;
   const student = rolePayload.student === true;
-  const lecturer = rolePayload.lecturer === true;
+  const tutor = rolePayload.tutor === true || rolePayload.lecturer === true;
 
-  if (!adminRole && !student && !lecturer) {
+  if (!adminRole && !student && !tutor) {
     throw new HttpsError("invalid-argument", "At least one role must be selected.");
   }
 
@@ -56,11 +56,11 @@ function toRoleArray(rolePayload, { allowAdmin = false } = {}) {
   if (student) {
     roles.push("student");
   }
-  if (lecturer) {
-    roles.push("lecturer");
+  if (tutor) {
+    roles.push("tutor");
   }
 
-  return { roles, adminRole, student, lecturer };
+  return { roles, adminRole, student, tutor };
 }
 
 function parseRolesFromUserDoc(data) {
@@ -72,7 +72,9 @@ function parseRolesFromUserDoc(data) {
         continue;
       }
       const normalized = role.trim().toLowerCase();
-      if (normalized) {
+      if (normalized === "lecturer") {
+        result.add("tutor");
+      } else if (normalized) {
         result.add(normalized);
       }
     }
@@ -80,7 +82,9 @@ function parseRolesFromUserDoc(data) {
 
   if (result.size === 0 && typeof data?.role === "string") {
     const legacyRole = data.role.trim().toLowerCase();
-    if (legacyRole) {
+    if (legacyRole === "lecturer") {
+      result.add("tutor");
+    } else if (legacyRole) {
       result.add(legacyRole);
     }
   }
@@ -150,7 +154,7 @@ exports.adminCreateUser = onCall({ region: ADMIN_REGION }, async (request) => {
     throw new HttpsError("invalid-argument", "Password must be at least 6 characters long.");
   }
 
-  const { roles, adminRole, student, lecturer } = toRoleArray(data.roles, { allowAdmin: true });
+  const { roles, adminRole, student, tutor } = toRoleArray(data.roles, { allowAdmin: true });
   const email = `${loginLowercase}@${LOGIN_DOMAIN}`;
 
   await ensureUniqueLogin(loginLowercase);
@@ -167,7 +171,8 @@ exports.adminCreateUser = onCall({ region: ADMIN_REGION }, async (request) => {
     await auth.setCustomUserClaims(createdUserRecord.uid, {
       admin: adminRole,
       student,
-      lecturer,
+      tutor,
+      lecturer: tutor,
     });
 
     await db.collection("users").doc(createdUserRecord.uid).set({
@@ -209,7 +214,7 @@ exports.adminUpdateUserRoles = onCall({ region: ADMIN_REGION }, async (request) 
     throw new HttpsError("invalid-argument", "UID is required.");
   }
 
-  const { roles, student, lecturer } = toRoleArray(data.roles);
+  const { roles, student, tutor } = toRoleArray(data.roles);
 
   let userRecord;
   try {
@@ -228,7 +233,7 @@ exports.adminUpdateUserRoles = onCall({ region: ADMIN_REGION }, async (request) 
   }
 
   const oldStudent = userRecord.customClaims?.student === true;
-  const oldLecturer = userRecord.customClaims?.lecturer === true;
+  const oldTutor = userRecord.customClaims?.tutor === true || userRecord.customClaims?.lecturer === true;
 
   await userRef.set(
     {
@@ -242,14 +247,15 @@ exports.adminUpdateUserRoles = onCall({ region: ADMIN_REGION }, async (request) 
     await auth.setCustomUserClaims(uid, {
       admin: false,
       student,
-      lecturer,
+      tutor,
+      lecturer: tutor,
     });
   } catch (error) {
     await userRef.set(
       {
         roles:
-          oldStudent || oldLecturer
-            ? [oldStudent ? "student" : null, oldLecturer ? "lecturer" : null].filter(Boolean)
+          oldStudent || oldTutor
+            ? [oldStudent ? "student" : null, oldTutor ? "tutor" : null].filter(Boolean)
             : [],
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },

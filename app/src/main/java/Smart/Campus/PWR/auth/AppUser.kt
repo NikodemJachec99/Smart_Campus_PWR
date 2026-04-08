@@ -12,7 +12,7 @@ data class AppUser(
     fun hasRole(role: UserRole): Boolean = roles.contains(role)
 
     fun hasDualRole(): Boolean =
-        roles.contains(UserRole.STUDENT) && roles.contains(UserRole.LECTURER)
+        roles.contains(UserRole.STUDENT) && roles.contains(UserRole.TUTOR)
 
     fun initials(): String {
         val words = displayName

@@ -6,6 +6,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.SetOptions
@@ -55,6 +57,58 @@ class FirebaseAuthRepository(
         }
     }
 
+    suspend fun register(
+        loginOrEmail: String,
+        password: String,
+        displayName: String,
+        student: Boolean,
+        tutor: Boolean
+    ): AppUser {
+        require(student || tutor) { "Select at least one role." }
+
+        val login = AuthMapping.normalizeLogin(loginOrEmail)
+        require(login.isNotBlank()) { "Login is required." }
+        require(password.length >= 6) { "Password must be at least 6 characters." }
+
+        val email = AuthMapping.aliasToEmail(login)
+        val safeDisplayName = displayName.trim().ifBlank { login }
+
+        withTimeout(AUTH_TIMEOUT_MS) {
+            auth.createUserWithEmailAndPassword(email, password).await()
+        }
+
+        val firebaseUser = auth.currentUser ?: throw IllegalStateException("User has not been created.")
+        firebaseUser.updateProfile(
+            UserProfileChangeRequest.Builder()
+                .setDisplayName(safeDisplayName)
+                .build()
+        ).await()
+
+        val roles = buildList {
+            if (student) add("student")
+            if (tutor) add("tutor")
+        }
+
+        firestore.collection("users").document(firebaseUser.uid).set(
+            mapOf(
+                "login" to login,
+                "loginLowercase" to login,
+                "email" to email,
+                "displayName" to safeDisplayName,
+                "roles" to roles,
+                "isActive" to true,
+                "createdBy" to firebaseUser.uid,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ),
+            SetOptions.merge()
+        ).await()
+
+        return requireNotNull(getCurrentUser()) {
+            "Registered user profile is missing."
+        }
+    }
+
     fun signOut() {
         auth.signOut()
     }
@@ -79,7 +133,7 @@ class FirebaseAuthRepository(
         val fallbackRoles = buildSet {
             if (claims["admin"] == true) add(UserRole.ADMIN)
             if (claims["student"] == true) add(UserRole.STUDENT)
-            if (claims["lecturer"] == true) add(UserRole.LECTURER)
+            if (claims["tutor"] == true || claims["lecturer"] == true) add(UserRole.TUTOR)
         }
 
         return AppUser(
@@ -111,7 +165,7 @@ class FirebaseAuthRepository(
         displayName: String,
         admin: Boolean,
         student: Boolean,
-        lecturer: Boolean
+        tutor: Boolean
     ): AppUser {
         val normalizedLogin = AuthMapping.normalizeLogin(login)
 
@@ -125,7 +179,7 @@ class FirebaseAuthRepository(
                     "roles" to mapOf(
                         "admin" to admin,
                         "student" to student,
-                        "lecturer" to lecturer
+                        "tutor" to tutor
                     )
                 )
             ) as? Map<*, *> ?: throw IllegalStateException("Invalid backend response.")
@@ -148,12 +202,12 @@ class FirebaseAuthRepository(
                 displayName = displayName,
                 admin = admin,
                 student = student,
-                lecturer = lecturer
+                tutor = tutor
             )
         }
     }
 
-    suspend fun adminUpdateUserRoles(uid: String, student: Boolean, lecturer: Boolean): Set<UserRole> {
+    suspend fun adminUpdateUserRoles(uid: String, student: Boolean, tutor: Boolean): Set<UserRole> {
         return try {
             val data = callAdminFunction(
                 functionName = "adminUpdateUserRoles",
@@ -161,7 +215,7 @@ class FirebaseAuthRepository(
                     "uid" to uid,
                     "roles" to mapOf(
                         "student" to student,
-                        "lecturer" to lecturer
+                        "tutor" to tutor
                     )
                 )
             ) as? Map<*, *> ?: throw IllegalStateException("Invalid backend response.")
@@ -174,7 +228,7 @@ class FirebaseAuthRepository(
             }
 
             Log.w(TAG, "Functions unavailable, using client fallback for adminUpdateUserRoles", error)
-            updateUserRolesViaFirestore(uid, student, lecturer)
+            updateUserRolesViaFirestore(uid, student, tutor)
         }
     }
 
@@ -189,6 +243,7 @@ class FirebaseAuthRepository(
 
     fun userMessage(error: Throwable): String {
         return when (error) {
+            is IllegalArgumentException -> error.message ?: "Invalid input."
             is TimeoutCancellationException -> "Sign-in timed out. Check emulator, Google Play Services, or try a physical device."
             is FirebaseAuthInvalidCredentialsException -> "Invalid login or password."
             is FirebaseAuthInvalidUserException -> "User does not exist in Firebase Auth."
@@ -196,12 +251,13 @@ class FirebaseAuthRepository(
                 "ERROR_INVALID_LOGIN_CREDENTIALS", "ERROR_WRONG_PASSWORD", "ERROR_INVALID_CREDENTIAL" ->
                     "Invalid login or password."
                 "ERROR_USER_NOT_FOUND" -> "User does not exist in Firebase Auth."
+                "ERROR_EMAIL_ALREADY_IN_USE" -> "User with this login already exists."
                 "ERROR_NETWORK_REQUEST_FAILED" -> "Network issue or Google Play Services problem."
-                "ERROR_TOO_MANY_REQUESTS" -> "Too many sign-in attempts. Try again shortly."
-                else -> "Firebase sign-in error: ${error.errorCode}"
+                "ERROR_TOO_MANY_REQUESTS" -> "Too many attempts. Try again shortly."
+                else -> "Firebase auth error: ${error.errorCode}"
             }
             is FirebaseFunctionsException -> when (error.code) {
-                FirebaseFunctionsException.Code.NOT_FOUND -> "Backend function not found. Admin panel local fallback is active."
+                FirebaseFunctionsException.Code.NOT_FOUND -> "Backend function not found. Admin fallback is active."
                 FirebaseFunctionsException.Code.PERMISSION_DENIED -> "No admin permission for this operation."
                 FirebaseFunctionsException.Code.UNAUTHENTICATED -> "Session expired. Sign in again."
                 FirebaseFunctionsException.Code.UNAVAILABLE -> "Functions backend is temporarily unavailable."
@@ -228,7 +284,7 @@ class FirebaseAuthRepository(
         displayName: String,
         admin: Boolean,
         student: Boolean,
-        lecturer: Boolean
+        tutor: Boolean
     ): AppUser {
         if (password.length < 6) {
             throw IllegalArgumentException("Password must be at least 6 characters.")
@@ -237,7 +293,7 @@ class FirebaseAuthRepository(
         val roles = mutableListOf<String>()
         if (admin) roles.add("admin")
         if (student) roles.add("student")
-        if (lecturer) roles.add("lecturer")
+        if (tutor) roles.add("tutor")
 
         if (roles.isEmpty()) {
             throw IllegalArgumentException("Select at least one role.")
@@ -255,8 +311,8 @@ class FirebaseAuthRepository(
             "roles" to roles,
             "isActive" to true,
             "createdBy" to creatorUid,
-            "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
         )
 
         firestore.collection("users").document(uid).set(userDoc, SetOptions.merge()).await()
@@ -266,8 +322,8 @@ class FirebaseAuthRepository(
         }
     }
 
-    private suspend fun updateUserRolesViaFirestore(uid: String, student: Boolean, lecturer: Boolean): Set<UserRole> {
-        if (!student && !lecturer) {
+    private suspend fun updateUserRolesViaFirestore(uid: String, student: Boolean, tutor: Boolean): Set<UserRole> {
+        if (!student && !tutor) {
             throw IllegalArgumentException("User must have at least one non-admin role.")
         }
 
@@ -284,13 +340,13 @@ class FirebaseAuthRepository(
 
         val roles = buildList {
             if (student) add("student")
-            if (lecturer) add("lecturer")
+            if (tutor) add("tutor")
         }
 
         userRef.set(
             mapOf(
                 "roles" to roles,
-                "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                "updatedAt" to FieldValue.serverTimestamp()
             ),
             SetOptions.merge()
         ).await()
@@ -418,4 +474,3 @@ class FirebaseAuthRepository(
         )
     }
 }
-

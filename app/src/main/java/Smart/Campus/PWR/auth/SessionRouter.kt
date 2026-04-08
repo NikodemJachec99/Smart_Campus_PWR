@@ -3,9 +3,7 @@ package Smart.Campus.PWR.auth
 enum class SessionDestination {
     LOGIN,
     ADMIN_PANEL,
-    ROLE_PICKER,
-    ROLE_HOME_STUDENT,
-    ROLE_HOME_LECTURER
+    MAIN_SHELL
 }
 
 object SessionRouter {
@@ -16,9 +14,7 @@ object SessionRouter {
 
         return when {
             user.hasRole(UserRole.ADMIN) -> SessionDestination.ADMIN_PANEL
-            user.hasDualRole() -> SessionDestination.ROLE_PICKER
-            user.hasRole(UserRole.STUDENT) -> SessionDestination.ROLE_HOME_STUDENT
-            user.hasRole(UserRole.LECTURER) -> SessionDestination.ROLE_HOME_LECTURER
+            user.hasRole(UserRole.STUDENT) || user.hasRole(UserRole.TUTOR) -> SessionDestination.MAIN_SHELL
             else -> SessionDestination.LOGIN
         }
     }

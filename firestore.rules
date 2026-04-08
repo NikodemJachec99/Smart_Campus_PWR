@@ -9,23 +9,104 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    function isAdminFromUserDoc() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles is list
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['admin']);
+    function hasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function rolesList() {
+      return hasUserDoc() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles is list
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles
+        : [];
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && (
+        request.auth.token[role] == true
+        || (role == 'tutor' && request.auth.token.lecturer == true)
+        || rolesList().hasAny([role])
+        || (role == 'tutor' && rolesList().hasAny(['lecturer']))
+      );
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.admin == true
-        || isAdminFromUserDoc()
-      );
+      return hasRole('admin');
+    }
+
+    function isStudent() {
+      return hasRole('student');
+    }
+
+    function isTutor() {
+      return hasRole('tutor');
     }
 
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow create, update, delete: if isAdmin();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.roles is list
+        && !request.resource.data.roles.hasAny(['admin'])
+        && request.resource.data.roles.hasAny(['student', 'tutor']);
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /tutor_availability/{slotId} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdmin()
+        || (isTutor() && request.resource.data.tutorId == request.auth.uid);
+
+      allow update: if isAdmin()
+        || (isTutor() && resource.data.tutorId == request.auth.uid)
+        || (
+          isStudent()
+          && resource.data.isBooked == false
+          && request.resource.data.isBooked == true
+          && request.resource.data.bookedBy == request.auth.uid
+          && request.resource.data.tutorId == resource.data.tutorId
+          && request.resource.data.subject == resource.data.subject
+          && request.resource.data.date == resource.data.date
+          && request.resource.data.startHour == resource.data.startHour
+          && request.resource.data.endHour == resource.data.endHour
+        );
+
+      allow delete: if isAdmin() || (isTutor() && resource.data.tutorId == request.auth.uid);
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (
+          resource.data.studentId == request.auth.uid
+          || resource.data.tutorId == request.auth.uid
+        ));
+
+      allow create: if isAdmin()
+        || (isStudent() && request.resource.data.studentId == request.auth.uid);
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+
+      allow create: if isStudent()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.tutorId != request.auth.uid;
+
+      allow update, delete: if isAdmin()
+        || (isStudent() && resource.data.studentId == request.auth.uid);
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin()
+        || (isStudent() && resource.data.studentId == request.auth.uid);
+
+      allow create: if isStudent()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.tutorId != request.auth.uid;
+
+      allow update, delete: if isAdmin();
     }
 
     match /classes/{classId} {

@@ -33,6 +33,7 @@ async function ensureAdminUser() {
   await auth.setCustomUserClaims(userRecord.uid, {
     admin: true,
     student: false,
+    tutor: false,
     lecturer: false,
   });
 

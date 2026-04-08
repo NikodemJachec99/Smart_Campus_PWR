@@ -5,15 +5,16 @@ import Smart.Campus.PWR.auth.FirebaseAuthRepository
 import Smart.Campus.PWR.auth.SessionDestination
 import Smart.Campus.PWR.auth.SessionRouter
 import Smart.Campus.PWR.auth.UserRole
-import Smart.Campus.PWR.dashboard.DashboardRepository
-import Smart.Campus.PWR.ui.state.AiTutorPlanUi
+import Smart.Campus.PWR.tutoring.TutoringRepository
+import Smart.Campus.PWR.ui.state.AdminUserInspectorUi
 import Smart.Campus.PWR.ui.state.AppScreen
+import Smart.Campus.PWR.ui.state.AvailabilityFormState
 import Smart.Campus.PWR.ui.state.CreateUserFormState
 import Smart.Campus.PWR.ui.state.DashboardUiState
-import Smart.Campus.PWR.ui.state.HomeUserSummaryUi
+import Smart.Campus.PWR.ui.state.RegisterFormState
+import Smart.Campus.PWR.ui.state.ReportFormState
+import Smart.Campus.PWR.ui.state.ReviewFormState
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
-import Smart.Campus.PWR.ui.state.UpcomingClassUi
-import Smart.Campus.PWR.ui.state.XpSummaryUi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,9 +24,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SmartCampusViewModel(
-    private val repository: FirebaseAuthRepository = FirebaseAuthRepository(),
-    private val dashboardRepository: DashboardRepository = DashboardRepository()
+    private val authRepository: FirebaseAuthRepository = FirebaseAuthRepository(),
+    private val tutoringRepository: TutoringRepository = TutoringRepository()
 ) : ViewModel() {
+
     private val _uiState = MutableStateFlow(SmartCampusUiState())
     val uiState: StateFlow<SmartCampusUiState> = _uiState.asStateFlow()
 
@@ -39,6 +41,316 @@ class SmartCampusViewModel(
 
     fun onPasswordChanged(value: String) {
         _uiState.update { it.copy(passwordInput = value) }
+    }
+
+    fun onRegisterLoginChanged(value: String) {
+        _uiState.update { it.copy(registerForm = it.registerForm.copy(login = value)) }
+    }
+
+    fun onRegisterPasswordChanged(value: String) {
+        _uiState.update { it.copy(registerForm = it.registerForm.copy(password = value)) }
+    }
+
+    fun onRegisterDisplayNameChanged(value: String) {
+        _uiState.update { it.copy(registerForm = it.registerForm.copy(displayName = value)) }
+    }
+
+    fun onRegisterStudentChecked(value: Boolean) {
+        _uiState.update { it.copy(registerForm = it.registerForm.copy(student = value)) }
+    }
+
+    fun onRegisterTutorChecked(value: Boolean) {
+        _uiState.update { it.copy(registerForm = it.registerForm.copy(tutor = value)) }
+    }
+
+    fun openRegister() {
+        _uiState.update {
+            it.copy(
+                screen = AppScreen.REGISTER,
+                errorMessage = null,
+                infoMessage = null,
+                registerForm = RegisterFormState()
+            )
+        }
+    }
+
+    fun openLogin() {
+        _uiState.update {
+            it.copy(
+                screen = AppScreen.LOGIN,
+                errorMessage = null,
+                infoMessage = null
+            )
+        }
+    }
+
+    fun login() {
+        val state = _uiState.value
+        if (state.loginInput.isBlank() || state.passwordInput.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Enter login and password.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, errorMessage = null, infoMessage = null) }
+            try {
+                val user = authRepository.signIn(state.loginInput, state.passwordInput)
+                applyRoutingForUser(user)
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(isBusy = false, errorMessage = authRepository.userMessage(error))
+                }
+            }
+        }
+    }
+
+    fun register() {
+        val form = _uiState.value.registerForm
+
+        if (form.login.isBlank() || form.password.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Login and password are required.") }
+            return
+        }
+
+        if (!form.student && !form.tutor) {
+            _uiState.update { it.copy(errorMessage = "Select at least one role (Student or Tutor).") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, errorMessage = null, infoMessage = null) }
+            try {
+                val user = authRepository.register(
+                    loginOrEmail = form.login,
+                    password = form.password,
+                    displayName = form.displayName,
+                    student = form.student,
+                    tutor = form.tutor
+                )
+                applyRoutingForUser(user)
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(isBusy = false, errorMessage = authRepository.userMessage(error))
+                }
+            }
+        }
+    }
+
+    fun logout() {
+        authRepository.signOut()
+        _uiState.update {
+            SmartCampusUiState(
+                isBootstrapping = false,
+                screen = AppScreen.LOGIN,
+                loginInput = it.loginInput,
+                passwordInput = "",
+                infoMessage = "Signed out."
+            )
+        }
+    }
+
+    fun toggleActiveRole() {
+        val state = _uiState.value
+        val user = state.currentUser ?: return
+        val currentRole = state.activeRole ?: return
+
+        if (!user.hasDualRole()) {
+            return
+        }
+
+        val nextRole = if (currentRole == UserRole.STUDENT) UserRole.TUTOR else UserRole.STUDENT
+        _uiState.update {
+            it.copy(activeRole = nextRole, infoMessage = "Switched to ${nextRole.displayName} mode.")
+        }
+    }
+
+    fun refreshMainData() {
+        val state = _uiState.value
+        val user = state.currentUser ?: return
+
+        viewModelScope.launch {
+            loadMainData(user)
+        }
+    }
+
+    fun onAvailabilitySubjectChanged(value: String) {
+        _uiState.update { it.copy(availabilityForm = it.availabilityForm.copy(subject = value)) }
+    }
+
+    fun onAvailabilityDateChanged(value: String) {
+        _uiState.update { it.copy(availabilityForm = it.availabilityForm.copy(date = value)) }
+    }
+
+    fun onAvailabilityStartHourChanged(value: String) {
+        _uiState.update { it.copy(availabilityForm = it.availabilityForm.copy(startHour = value)) }
+    }
+
+    fun onAvailabilityEndHourChanged(value: String) {
+        _uiState.update { it.copy(availabilityForm = it.availabilityForm.copy(endHour = value)) }
+    }
+
+    fun addAvailability() {
+        val state = _uiState.value
+        val user = state.currentUser ?: return
+
+        if (!user.hasRole(UserRole.TUTOR)) {
+            _uiState.update { it.copy(errorMessage = "Only tutors can add availability.") }
+            return
+        }
+
+        val form = state.availabilityForm
+        val start = form.startHour.toIntOrNull()
+        val end = form.endHour.toIntOrNull()
+
+        if (start == null || end == null) {
+            _uiState.update { it.copy(errorMessage = "Start and end hour must be numeric.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                tutoringRepository.createAvailability(user, form.subject, form.date, start, end)
+                _uiState.update {
+                    it.copy(
+                        isMainSubmitting = false,
+                        availabilityForm = AvailabilityFormState(),
+                        infoMessage = "Availability slot added."
+                    )
+                }
+                loadMainData(user)
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error))
+                }
+            }
+        }
+    }
+
+    fun bookTutorSlot(slotId: String) {
+        val state = _uiState.value
+        val user = state.currentUser ?: return
+
+        if (!user.hasRole(UserRole.STUDENT)) {
+            _uiState.update { it.copy(errorMessage = "Only students can book lessons.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                tutoringRepository.bookAvailability(slotId, user)
+                _uiState.update {
+                    it.copy(
+                        isMainSubmitting = false,
+                        infoMessage = "Lesson booked successfully."
+                    )
+                }
+                loadMainData(user)
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error))
+                }
+            }
+        }
+    }
+
+    fun onReviewTutorChanged(value: String) {
+        _uiState.update { it.copy(reviewForm = it.reviewForm.copy(tutorUid = value)) }
+    }
+
+    fun onReviewRatingChanged(value: String) {
+        _uiState.update { it.copy(reviewForm = it.reviewForm.copy(rating = value)) }
+    }
+
+    fun onReviewCommentChanged(value: String) {
+        _uiState.update { it.copy(reviewForm = it.reviewForm.copy(comment = value)) }
+    }
+
+    fun submitReview() {
+        val state = _uiState.value
+        val user = state.currentUser ?: return
+
+        if (!user.hasRole(UserRole.STUDENT)) {
+            _uiState.update { it.copy(errorMessage = "Only students can submit reviews.") }
+            return
+        }
+
+        val rating = state.reviewForm.rating.toIntOrNull()
+        if (rating == null) {
+            _uiState.update { it.copy(errorMessage = "Rating must be a number between 1 and 5.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                tutoringRepository.createReview(
+                    student = user,
+                    tutorUid = state.reviewForm.tutorUid,
+                    rating = rating,
+                    comment = state.reviewForm.comment
+                )
+                _uiState.update {
+                    it.copy(
+                        isMainSubmitting = false,
+                        reviewForm = ReviewFormState(rating = "5"),
+                        infoMessage = "Review added."
+                    )
+                }
+                loadMainData(user)
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error))
+                }
+            }
+        }
+    }
+
+    fun onReportTutorChanged(value: String) {
+        _uiState.update { it.copy(reportForm = it.reportForm.copy(tutorUid = value)) }
+    }
+
+    fun onReportReasonChanged(value: String) {
+        _uiState.update { it.copy(reportForm = it.reportForm.copy(reason = value)) }
+    }
+
+    fun onReportDetailsChanged(value: String) {
+        _uiState.update { it.copy(reportForm = it.reportForm.copy(details = value)) }
+    }
+
+    fun submitReport() {
+        val state = _uiState.value
+        val user = state.currentUser ?: return
+
+        if (!user.hasRole(UserRole.STUDENT)) {
+            _uiState.update { it.copy(errorMessage = "Only students can report tutors.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                tutoringRepository.createReport(
+                    student = user,
+                    tutorUid = state.reportForm.tutorUid,
+                    reason = state.reportForm.reason,
+                    details = state.reportForm.details
+                )
+                _uiState.update {
+                    it.copy(
+                        isMainSubmitting = false,
+                        reportForm = ReportFormState(),
+                        infoMessage = "Report sent to admin."
+                    )
+                }
+                loadMainData(user)
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error))
+                }
+            }
+        }
     }
 
     fun onCreateLoginChanged(value: String) {
@@ -61,78 +373,8 @@ class SmartCampusViewModel(
         _uiState.update { it.copy(createUserForm = it.createUserForm.copy(student = value)) }
     }
 
-    fun onCreateLecturerChecked(value: Boolean) {
-        _uiState.update { it.copy(createUserForm = it.createUserForm.copy(lecturer = value)) }
-    }
-
-    fun login() {
-        val state = _uiState.value
-        if (state.loginInput.isBlank() || state.passwordInput.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Enter login and password.") }
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isBusy = true, errorMessage = null, infoMessage = null) }
-            try {
-                val user = repository.signIn(state.loginInput, state.passwordInput)
-                applyRoutingForUser(user)
-            } catch (error: Throwable) {
-                _uiState.update {
-                    it.copy(isBusy = false, errorMessage = repository.userMessage(error))
-                }
-            }
-        }
-    }
-
-    fun logout() {
-        repository.signOut()
-        _uiState.update {
-            SmartCampusUiState(
-                isBootstrapping = false,
-                screen = AppScreen.LOGIN,
-                loginInput = it.loginInput,
-                passwordInput = "",
-                infoMessage = "Signed out."
-            )
-        }
-    }
-
-    fun selectRole(role: UserRole) {
-        val currentUser = _uiState.value.currentUser ?: return
-        if (!currentUser.hasRole(role)) {
-            _uiState.update { it.copy(errorMessage = "No permission for this role.") }
-            return
-        }
-
-        viewModelScope.launch {
-            navigateToMainShell(currentUser, role)
-        }
-    }
-
-    fun openRolePicker() {
-        val currentUser = _uiState.value.currentUser ?: return
-        if (!currentUser.hasDualRole()) {
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                screen = AppScreen.ROLE_PICKER,
-                activeRole = null,
-                errorMessage = null,
-                infoMessage = null
-            )
-        }
-    }
-
-    fun refreshDashboard() {
-        val user = _uiState.value.currentUser ?: return
-        val activeRole = _uiState.value.activeRole ?: return
-
-        viewModelScope.launch {
-            loadDashboard(user, activeRole)
-        }
+    fun onCreateTutorChecked(value: Boolean) {
+        _uiState.update { it.copy(createUserForm = it.createUserForm.copy(tutor = value)) }
     }
 
     fun refreshAdminUsers() {
@@ -144,13 +386,18 @@ class SmartCampusViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isAdminUsersLoading = true, errorMessage = null, infoMessage = null) }
             try {
-                val users = repository.listUsers()
+                val users = authRepository.listUsers()
+                val reports = tutoringRepository.loadAdminReports()
                 _uiState.update {
-                    it.copy(isAdminUsersLoading = false, adminUsers = users)
+                    it.copy(
+                        isAdminUsersLoading = false,
+                        adminUsers = users,
+                        dashboardState = it.dashboardState.copy(adminReports = reports)
+                    )
                 }
             } catch (error: Throwable) {
                 _uiState.update {
-                    it.copy(isAdminUsersLoading = false, errorMessage = repository.userMessage(error))
+                    it.copy(isAdminUsersLoading = false, errorMessage = authRepository.userMessage(error))
                 }
             }
         }
@@ -159,7 +406,7 @@ class SmartCampusViewModel(
     fun createUserByAdmin() {
         val form = _uiState.value.createUserForm
 
-        if (!form.admin && !form.student && !form.lecturer) {
+        if (!form.admin && !form.student && !form.tutor) {
             _uiState.update { it.copy(errorMessage = "Select at least one role.") }
             return
         }
@@ -172,16 +419,16 @@ class SmartCampusViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isAdminSubmitting = true, errorMessage = null, infoMessage = null) }
             try {
-                repository.adminCreateUser(
+                authRepository.adminCreateUser(
                     login = form.login,
                     password = form.password,
                     displayName = form.displayName,
                     admin = form.admin,
                     student = form.student,
-                    lecturer = form.lecturer
+                    tutor = form.tutor
                 )
 
-                val users = repository.listUsers()
+                val users = authRepository.listUsers()
                 _uiState.update {
                     it.copy(
                         isAdminSubmitting = false,
@@ -192,14 +439,14 @@ class SmartCampusViewModel(
                 }
             } catch (error: Throwable) {
                 _uiState.update {
-                    it.copy(isAdminSubmitting = false, errorMessage = repository.userMessage(error))
+                    it.copy(isAdminSubmitting = false, errorMessage = authRepository.userMessage(error))
                 }
             }
         }
     }
 
-    fun updateUserRolesByAdmin(uid: String, student: Boolean, lecturer: Boolean) {
-        if (!student && !lecturer) {
+    fun updateUserRolesByAdmin(uid: String, student: Boolean, tutor: Boolean) {
+        if (!student && !tutor) {
             _uiState.update { it.copy(errorMessage = "User must have at least one non-admin role.") }
             return
         }
@@ -207,8 +454,8 @@ class SmartCampusViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isAdminSubmitting = true, errorMessage = null, infoMessage = null) }
             try {
-                repository.adminUpdateUserRoles(uid, student, lecturer)
-                val users = repository.listUsers()
+                authRepository.adminUpdateUserRoles(uid, student, tutor)
+                val users = authRepository.listUsers()
                 _uiState.update {
                     it.copy(
                         isAdminSubmitting = false,
@@ -218,7 +465,45 @@ class SmartCampusViewModel(
                 }
             } catch (error: Throwable) {
                 _uiState.update {
-                    it.copy(isAdminSubmitting = false, errorMessage = repository.userMessage(error))
+                    it.copy(isAdminSubmitting = false, errorMessage = authRepository.userMessage(error))
+                }
+            }
+        }
+    }
+
+    fun toggleAdminInspector(uid: String) {
+        val state = _uiState.value
+        val adminUser = state.currentUser ?: return
+        if (!adminUser.hasRole(UserRole.ADMIN)) {
+            return
+        }
+
+        if (state.adminInspectors.containsKey(uid)) {
+            _uiState.update {
+                it.copy(adminInspectors = it.adminInspectors - uid)
+            }
+            return
+        }
+
+        val targetUser = state.adminUsers.firstOrNull { it.uid == uid } ?: return
+        _uiState.update {
+            it.copy(
+                adminInspectors = it.adminInspectors + (uid to AdminUserInspectorUi(user = targetUser, isLoading = true))
+            )
+        }
+
+        viewModelScope.launch {
+            try {
+                val inspector = tutoringRepository.loadAdminUserInspector(targetUser)
+                _uiState.update {
+                    it.copy(adminInspectors = it.adminInspectors + (uid to inspector))
+                }
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        adminInspectors = it.adminInspectors - uid,
+                        errorMessage = authRepository.userMessage(error)
+                    )
                 }
             }
         }
@@ -231,7 +516,7 @@ class SmartCampusViewModel(
     private fun bootstrapSession() {
         viewModelScope.launch {
             try {
-                val user = repository.getCurrentUser()
+                val user = authRepository.getCurrentUser()
                 if (user == null) {
                     _uiState.update {
                         it.copy(
@@ -253,7 +538,7 @@ class SmartCampusViewModel(
                         isBootstrapping = false,
                         isBusy = false,
                         screen = AppScreen.LOGIN,
-                        errorMessage = repository.userMessage(error)
+                        errorMessage = authRepository.userMessage(error)
                     )
                 }
             }
@@ -263,7 +548,8 @@ class SmartCampusViewModel(
     private suspend fun applyRoutingForUser(user: AppUser) {
         when (SessionRouter.resolve(user)) {
             SessionDestination.ADMIN_PANEL -> {
-                val users = repository.listUsers()
+                val users = authRepository.listUsers()
+                val reports = tutoringRepository.loadAdminReports()
                 _uiState.update {
                     it.copy(
                         isBootstrapping = false,
@@ -272,28 +558,38 @@ class SmartCampusViewModel(
                         currentUser = user,
                         activeRole = null,
                         adminUsers = users,
+                        dashboardState = DashboardUiState(adminReports = reports),
                         passwordInput = "",
-                        errorMessage = null
+                        errorMessage = null,
+                        registerForm = RegisterFormState()
                     )
                 }
             }
 
-            SessionDestination.ROLE_PICKER -> {
-                _uiState.update {
-                    it.copy(
-                        isBootstrapping = false,
-                        isBusy = false,
-                        screen = AppScreen.ROLE_PICKER,
-                        currentUser = user,
-                        activeRole = null,
-                        passwordInput = "",
-                        errorMessage = null
-                    )
+            SessionDestination.MAIN_SHELL -> {
+                val defaultRole = when {
+                    user.hasRole(UserRole.STUDENT) -> UserRole.STUDENT
+                    user.hasRole(UserRole.TUTOR) -> UserRole.TUTOR
+                    else -> null
                 }
+
+                if (defaultRole == null) {
+                    _uiState.update {
+                        it.copy(
+                            isBootstrapping = false,
+                            isBusy = false,
+                            screen = AppScreen.LOGIN,
+                            currentUser = null,
+                            activeRole = null,
+                            errorMessage = "No role assigned to this account."
+                        )
+                    }
+                    return
+                }
+
+                navigateToMainShell(user, defaultRole)
             }
 
-            SessionDestination.ROLE_HOME_STUDENT -> navigateToMainShell(user, UserRole.STUDENT)
-            SessionDestination.ROLE_HOME_LECTURER -> navigateToMainShell(user, UserRole.LECTURER)
             SessionDestination.LOGIN -> {
                 _uiState.update {
                     it.copy(
@@ -319,19 +615,15 @@ class SmartCampusViewModel(
                 activeRole = role,
                 passwordInput = "",
                 errorMessage = null,
-                dashboardState = buildDashboardState(
-                    user = user,
-                    activeRole = role,
-                    upcomingClasses = emptyList(),
-                    isLoading = true
-                )
+                registerForm = RegisterFormState(),
+                dashboardState = DashboardUiState(isLoading = true)
             )
         }
 
-        loadDashboard(user, role)
+        loadMainData(user)
     }
 
-    private suspend fun loadDashboard(user: AppUser, activeRole: UserRole) {
+    private suspend fun loadMainData(user: AppUser) {
         _uiState.update {
             it.copy(
                 dashboardState = it.dashboardState.copy(isLoading = true),
@@ -339,100 +631,20 @@ class SmartCampusViewModel(
             )
         }
 
-        val upcomingClasses = try {
-            dashboardRepository.getUpcomingClasses(user, activeRole)
-        } catch (_: Exception) {
-            emptyList()
-        }
-
-        _uiState.update {
-            it.copy(
-                dashboardState = buildDashboardState(
-                    user = user,
-                    activeRole = activeRole,
-                    upcomingClasses = upcomingClasses,
-                    isLoading = false
+        try {
+            val dashboard = tutoringRepository.loadDashboard(user)
+            _uiState.update {
+                it.copy(
+                    dashboardState = dashboard.copy(isLoading = false)
                 )
-            )
+            }
+        } catch (error: Throwable) {
+            _uiState.update {
+                it.copy(
+                    dashboardState = it.dashboardState.copy(isLoading = false),
+                    errorMessage = authRepository.userMessage(error)
+                )
+            }
         }
-    }
-
-    private fun buildDashboardState(
-        user: AppUser,
-        activeRole: UserRole,
-        upcomingClasses: List<UpcomingClassUi>,
-        isLoading: Boolean
-    ): DashboardUiState {
-        val roleLabel = when (activeRole) {
-            UserRole.STUDENT -> "Student mode"
-            UserRole.LECTURER -> "Lecturer mode"
-            UserRole.ADMIN -> "Admin mode"
-        }
-
-        val greeting = when (activeRole) {
-            UserRole.STUDENT -> "Good morning,"
-            UserRole.LECTURER -> "Welcome back,"
-            UserRole.ADMIN -> "Welcome,"
-        }
-
-        val xpSummary = when (activeRole) {
-            UserRole.STUDENT -> XpSummaryUi(
-                currentXp = 1250,
-                targetXp = 2000,
-                helperLabel = "Gamification module is in demo mode.",
-                badges = listOf("XP", "AI"),
-                isPlaceholder = true
-            )
-            UserRole.LECTURER -> XpSummaryUi(
-                currentXp = 890,
-                targetXp = 1500,
-                helperLabel = "Lecturer activity statistics are in progress.",
-                badges = listOf("LE", "AI"),
-                isPlaceholder = true
-            )
-            UserRole.ADMIN -> XpSummaryUi(
-                currentXp = 0,
-                targetXp = 1,
-                helperLabel = "Admin dashboard remains a separate screen.",
-                badges = emptyList(),
-                isPlaceholder = true
-            )
-        }
-
-        val aiPlan = when (activeRole) {
-            UserRole.STUDENT -> AiTutorPlanUi(
-                title = "AI Tutor: your plan for today",
-                description = "Connect the AI module to get tasks tailored to your level and deadlines.",
-                taskTitle = "No active AI plan",
-                estimatedTimeLabel = "Waiting for integration",
-                isPlaceholder = true
-            )
-            UserRole.LECTURER -> AiTutorPlanUi(
-                title = "AI Assistant: lecturer support",
-                description = "Recommendations, class summaries, and group tips will appear here.",
-                taskTitle = "No active recommendations",
-                estimatedTimeLabel = "Waiting for integration",
-                isPlaceholder = true
-            )
-            UserRole.ADMIN -> null
-        }
-
-        return DashboardUiState(
-            isLoading = isLoading,
-            userSummary = HomeUserSummaryUi(
-                displayName = user.displayName,
-                greeting = greeting,
-                roleLabel = roleLabel,
-                avatarUrl = user.avatarUrl,
-                initials = user.initials(),
-                notificationCount = 0
-            ),
-            xpSummary = xpSummary,
-            gpsAlarm = null,
-            aiTutorPlan = aiPlan,
-            upcomingClasses = upcomingClasses
-        )
     }
 }
-
-

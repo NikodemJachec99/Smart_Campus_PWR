@@ -5,10 +5,18 @@ import Smart.Campus.PWR.auth.UserRole
 
 enum class AppScreen {
     LOGIN,
-    ROLE_PICKER,
+    REGISTER,
     MAIN_SHELL,
     ADMIN_PANEL
 }
+
+data class RegisterFormState(
+    val login: String = "",
+    val password: String = "",
+    val displayName: String = "",
+    val student: Boolean = true,
+    val tutor: Boolean = false
+)
 
 data class CreateUserFormState(
     val login: String = "",
@@ -16,7 +24,38 @@ data class CreateUserFormState(
     val displayName: String = "",
     val admin: Boolean = false,
     val student: Boolean = true,
-    val lecturer: Boolean = false
+    val tutor: Boolean = false
+)
+
+data class AvailabilityFormState(
+    val subject: String = "",
+    val date: String = "",
+    val startHour: String = "",
+    val endHour: String = ""
+)
+
+data class ReviewFormState(
+    val tutorUid: String = "",
+    val rating: String = "5",
+    val comment: String = ""
+)
+
+data class ReportFormState(
+    val tutorUid: String = "",
+    val reason: String = "",
+    val details: String = ""
+)
+
+data class AdminUserInspectorUi(
+    val user: AppUser,
+    val availability: List<TutorAvailabilityUi> = emptyList(),
+    val bookingsAsTutor: List<LessonBookingUi> = emptyList(),
+    val bookingsAsStudent: List<LessonBookingUi> = emptyList(),
+    val reviewsReceived: List<TutorReviewUi> = emptyList(),
+    val reviewsWritten: List<TutorReviewUi> = emptyList(),
+    val reportsReceived: List<TutorReportUi> = emptyList(),
+    val reportsWritten: List<TutorReportUi> = emptyList(),
+    val isLoading: Boolean = false
 )
 
 data class SmartCampusUiState(
@@ -27,11 +66,17 @@ data class SmartCampusUiState(
     val activeRole: UserRole? = null,
     val loginInput: String = "",
     val passwordInput: String = "",
+    val registerForm: RegisterFormState = RegisterFormState(),
     val errorMessage: String? = null,
     val infoMessage: String? = null,
     val adminUsers: List<AppUser> = emptyList(),
+    val adminInspectors: Map<String, AdminUserInspectorUi> = emptyMap(),
     val isAdminUsersLoading: Boolean = false,
     val isAdminSubmitting: Boolean = false,
     val createUserForm: CreateUserFormState = CreateUserFormState(),
+    val isMainSubmitting: Boolean = false,
+    val availabilityForm: AvailabilityFormState = AvailabilityFormState(),
+    val reviewForm: ReviewFormState = ReviewFormState(),
+    val reportForm: ReportFormState = ReportFormState(),
     val dashboardState: DashboardUiState = DashboardUiState()
 )

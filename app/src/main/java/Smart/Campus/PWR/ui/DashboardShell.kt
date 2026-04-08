@@ -2,109 +2,227 @@ package Smart.Campus.PWR.ui
 
 import Smart.Campus.PWR.auth.AppUser
 import Smart.Campus.PWR.auth.UserRole
+import Smart.Campus.PWR.ui.state.AdminUserInspectorUi
 import Smart.Campus.PWR.ui.state.DashboardRoutes
 import Smart.Campus.PWR.ui.state.DashboardTab
-import Smart.Campus.PWR.ui.state.DashboardUiState
+import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
-import Smart.Campus.PWR.ui.state.QuickActionType
-import Smart.Campus.PWR.ui.state.QuickActionUi
-import Smart.Campus.PWR.ui.state.UpcomingClassUi
+import Smart.Campus.PWR.ui.state.TutorAvailabilityUi
+import Smart.Campus.PWR.ui.state.TutorReportUi
+import Smart.Campus.PWR.ui.state.TutorReviewUi
+import Smart.Campus.PWR.ui.state.TutorSummaryUi
 import Smart.Campus.PWR.ui.theme.AppBackground
 import Smart.Campus.PWR.ui.theme.AppSurface
-import Smart.Campus.PWR.ui.theme.AppSurfaceMuted
-import Smart.Campus.PWR.ui.theme.OrangeSoft
-import Smart.Campus.PWR.ui.theme.OrangeText
-import Smart.Campus.PWR.ui.theme.PurpleSoft
-import Smart.Campus.PWR.ui.theme.PurpleText
-import Smart.Campus.PWR.ui.theme.PwrBlueMuted
 import Smart.Campus.PWR.ui.theme.PwrBlueSoft
 import Smart.Campus.PWR.ui.theme.PwrNavy
-import Smart.Campus.PWR.ui.theme.PwrNavyDark
 import Smart.Campus.PWR.ui.theme.PwrRed
-import Smart.Campus.PWR.ui.theme.PwrRedSoft
-import Smart.Campus.PWR.ui.theme.SuccessSoft
-import Smart.Campus.PWR.ui.theme.SuccessText
-import Smart.Campus.PWR.ui.theme.TextPrimary
 import Smart.Campus.PWR.ui.theme.TextSecondary
-import Smart.Campus.PWR.ui.theme.WarningSoft
-import Smart.Campus.PWR.ui.theme.WarningText
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.ChatBubbleOutline
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Logout
-import androidx.compose.material.icons.rounded.Map
-import androidx.compose.material.icons.rounded.NotificationsNone
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Place
-import androidx.compose.material.icons.rounded.Psychology
-import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material.icons.rounded.WorkspacePremium
-import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedAssistChip
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import coil.compose.AsyncImage
 
-private enum class AdminShellTab(val route: String, val label: String, val icon: ImageVector) {
-    ADMIN("admin_home", "Admin", Icons.Rounded.Shield),
-    MAP(DashboardRoutes.MAP, "Map", Icons.Rounded.Map),
-    CHAT(DashboardRoutes.CHAT, "Chats", Icons.Rounded.ChatBubbleOutline),
-    PROFILE(DashboardRoutes.PROFILE, "Profile", Icons.Rounded.Person)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainShellScreen(
+    state: SmartCampusUiState,
+    onToggleRole: () -> Unit,
+    onRefreshDashboard: () -> Unit,
+    onLogout: () -> Unit,
+    onAvailabilitySubjectChanged: (String) -> Unit,
+    onAvailabilityDateChanged: (String) -> Unit,
+    onAvailabilityStartHourChanged: (String) -> Unit,
+    onAvailabilityEndHourChanged: (String) -> Unit,
+    onAddAvailability: () -> Unit,
+    onBookTutorSlot: (String) -> Unit,
+    onReviewTutorChanged: (String) -> Unit,
+    onReviewRatingChanged: (String) -> Unit,
+    onReviewCommentChanged: (String) -> Unit,
+    onSubmitReview: () -> Unit,
+    onReportTutorChanged: (String) -> Unit,
+    onReportReasonChanged: (String) -> Unit,
+    onReportDetailsChanged: (String) -> Unit,
+    onSubmitReport: () -> Unit,
+    onClearMessages: () -> Unit
+) {
+    val currentUser = state.currentUser ?: return
+    val activeRole = state.activeRole ?: return
+    val navController = rememberNavController()
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route ?: DashboardRoutes.HOME
+
+    Scaffold(
+        containerColor = AppBackground,
+        topBar = {
+            TopAppBar(
+                title = { Text("${currentUser.displayName} (${activeRole.displayName})") },
+                actions = {
+                    if (currentUser.hasDualRole()) {
+                        OutlinedButton(onClick = { onClearMessages(); onToggleRole() }) {
+                            Icon(Icons.Rounded.SwapHoriz, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (activeRole == UserRole.STUDENT) "Tutor" else "Student")
+                        }
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            NavigationBar(containerColor = AppSurface) {
+                DashboardTab.entries.forEach { tab ->
+                    NavigationBarItem(
+                        selected = currentRoute == tab.route,
+                        onClick = {
+                            navController.navigate(tab.route) {
+                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(tab.icon(), contentDescription = tab.label) },
+                        label = { Text(tab.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = PwrNavy,
+                            selectedTextColor = PwrNavy,
+                            indicatorColor = PwrBlueSoft
+                        )
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        NavHost(navController = navController, startDestination = DashboardRoutes.HOME, modifier = Modifier.fillMaxSize().padding(padding)) {
+            composable(DashboardRoutes.HOME) {
+                MainList {
+                    MessageBlock(state.errorMessage, state.infoMessage)
+                    SectionCard("Dashboard") {
+                        Text(if (activeRole == UserRole.STUDENT) "Book lessons and manage your student calendar." else "Manage tutor availability and sessions.")
+                        Button(onClick = { onClearMessages(); onRefreshDashboard() }) { Text("Refresh") }
+                    }
+                    Text(if (activeRole == UserRole.STUDENT) "My student lessons" else "My tutor lessons", fontWeight = FontWeight.Bold)
+                    val lessons = if (activeRole == UserRole.STUDENT) state.dashboardState.myStudentBookings else state.dashboardState.myTutorBookings
+                    if (lessons.isEmpty()) Text("No lessons yet.", color = TextSecondary)
+                    lessons.forEach { LessonCard(it) }
+                }
+            }
+            composable(DashboardRoutes.CALENDAR) {
+                MainList {
+                    MessageBlock(state.errorMessage, state.infoMessage)
+                    if (activeRole == UserRole.TUTOR) {
+                        SectionCard("Set availability") {
+                            OutlinedTextField(state.availabilityForm.subject, onAvailabilitySubjectChanged, label = { Text("Subject") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(state.availabilityForm.date, onAvailabilityDateChanged, label = { Text("Date YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth())
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(state.availabilityForm.startHour, onAvailabilityStartHourChanged, label = { Text("Start") }, modifier = Modifier.weight(1f))
+                                OutlinedTextField(state.availabilityForm.endHour, onAvailabilityEndHourChanged, label = { Text("End") }, modifier = Modifier.weight(1f))
+                            }
+                            Button(onClick = { onClearMessages(); onAddAvailability() }) { Text("Add slot") }
+                        }
+                        Text("My availability", fontWeight = FontWeight.Bold)
+                        if (state.dashboardState.myAvailability.isEmpty()) Text("No availability slots.", color = TextSecondary)
+                        state.dashboardState.myAvailability.forEach { AvailabilityCard(it, null) }
+                    } else {
+                        Text("My booked lessons", fontWeight = FontWeight.Bold)
+                        if (state.dashboardState.myStudentBookings.isEmpty()) Text("No booked lessons.", color = TextSecondary)
+                        state.dashboardState.myStudentBookings.forEach { LessonCard(it) }
+                        Text("Open tutor slots", fontWeight = FontWeight.Bold)
+                        if (state.dashboardState.availableTutorSlots.isEmpty()) Text("No open slots.", color = TextSecondary)
+                        state.dashboardState.availableTutorSlots.forEach { AvailabilityCard(it, onBookTutorSlot) }
+                    }
+                }
+            }
+            composable(DashboardRoutes.REVIEWS) {
+                MainList {
+                    MessageBlock(state.errorMessage, state.infoMessage)
+                    if (activeRole == UserRole.STUDENT) {
+                        SectionCard("Add review") {
+                            TutorPicker(state.dashboardState.tutors, state.reviewForm.tutorUid, onReviewTutorChanged)
+                            OutlinedTextField(state.reviewForm.tutorUid, onReviewTutorChanged, label = { Text("Tutor UID") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(state.reviewForm.rating, onReviewRatingChanged, label = { Text("Rating 1-5") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(state.reviewForm.comment, onReviewCommentChanged, label = { Text("Comment") }, modifier = Modifier.fillMaxWidth())
+                            Button(onClick = { onClearMessages(); onSubmitReview() }) { Text("Submit review") }
+                        }
+                        SectionCard("Report tutor") {
+                            TutorPicker(state.dashboardState.tutors, state.reportForm.tutorUid, onReportTutorChanged)
+                            OutlinedTextField(state.reportForm.tutorUid, onReportTutorChanged, label = { Text("Tutor UID") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(state.reportForm.reason, onReportReasonChanged, label = { Text("Reason") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(state.reportForm.details, onReportDetailsChanged, label = { Text("Details") }, modifier = Modifier.fillMaxWidth())
+                            Button(onClick = { onClearMessages(); onSubmitReport() }) { Text("Send report") }
+                        }
+                        Text("My reviews", fontWeight = FontWeight.Bold)
+                        if (state.dashboardState.reviewsByMe.isEmpty()) Text("No reviews.", color = TextSecondary)
+                        state.dashboardState.reviewsByMe.forEach { ReviewCard(it) }
+                    } else {
+                        Text("Reviews about me", fontWeight = FontWeight.Bold)
+                        if (state.dashboardState.reviewsForMe.isEmpty()) Text("No reviews yet.", color = TextSecondary)
+                        state.dashboardState.reviewsForMe.forEach { ReviewCard(it) }
+                    }
+                }
+            }
+            composable(DashboardRoutes.PROFILE) {
+                MainList {
+                    SectionCard("Profile") {
+                        Text(currentUser.displayName)
+                        Text(currentUser.email, color = TextSecondary)
+                        Text("Roles: ${currentUser.roles.joinToString { it.displayName }}")
+                        OutlinedButton(onClick = onLogout) {
+                            Icon(Icons.Rounded.Logout, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sign out")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -117,468 +235,170 @@ fun AdminShellScreen(
     onCreateDisplayNameChanged: (String) -> Unit,
     onCreateAdminChecked: (Boolean) -> Unit,
     onCreateStudentChecked: (Boolean) -> Unit,
-    onCreateLecturerChecked: (Boolean) -> Unit,
+    onCreateTutorChecked: (Boolean) -> Unit,
     onCreateUserClick: () -> Unit,
     onUpdateUserRoles: (String, Boolean, Boolean) -> Unit,
+    onToggleInspector: (String) -> Unit,
     onClearMessages: () -> Unit
 ) {
-    val navController = rememberNavController()
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route ?: AdminShellTab.ADMIN.route
-    val currentUser = state.currentUser
-
-    Scaffold(
-        containerColor = AppBackground,
-        bottomBar = {
-            NavigationBar(containerColor = Color.White.copy(alpha = 0.96f)) {
-                AdminShellTab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentRoute == tab.route,
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) },
-                        alwaysShowLabel = false,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = PwrNavy,
-                            selectedTextColor = PwrNavy,
-                            indicatorColor = PwrBlueSoft,
-                            unselectedIconColor = PwrBlueMuted,
-                            unselectedTextColor = PwrBlueMuted
-                        )
-                    )
-                }
+    MainList {
+        SectionCard("Admin Panel") {
+            Text(state.currentUser?.displayName.orEmpty())
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onClearMessages(); onRefresh() }) { Icon(Icons.Rounded.Refresh, null); Spacer(Modifier.width(4.dp)); Text("Refresh") }
+                OutlinedButton(onClick = onLogout) { Text("Sign out") }
             }
         }
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = AdminShellTab.ADMIN.route,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            composable(AdminShellTab.ADMIN.route) {
-                AdminPanelScreen(
-                    state = state,
-                    onRefresh = onRefresh,
-                    onLogout = onLogout,
-                    onCreateLoginChanged = onCreateLoginChanged,
-                    onCreatePasswordChanged = onCreatePasswordChanged,
-                    onCreateDisplayNameChanged = onCreateDisplayNameChanged,
-                    onCreateAdminChecked = onCreateAdminChecked,
-                    onCreateStudentChecked = onCreateStudentChecked,
-                    onCreateLecturerChecked = onCreateLecturerChecked,
-                    onCreateUserClick = onCreateUserClick,
-                    onUpdateUserRoles = onUpdateUserRoles,
-                    onClearMessages = onClearMessages
-                )
-            }
-            composable(AdminShellTab.MAP.route) {
-                ModulePlaceholderScreen(Icons.Rounded.Map, "Map PWr", "Map module is ready for future integration with routes and rooms.")
-            }
-            composable(AdminShellTab.CHAT.route) {
-                ModulePlaceholderScreen(Icons.Rounded.Forum, "PWr Chat", "Group chats and campus communication will appear here.")
-            }
-            composable(AdminShellTab.PROFILE.route) {
-                if (currentUser != null) {
-                    ProfileeScreen(
-                        currentUser = currentUser,
-                        activeRole = UserRole.ADMIN,
-                        onOpenRolePicker = {},
-                        onLogout = onLogout
-                    )
-                } else {
-                    ModulePlaceholderScreen(Icons.Rounded.Person, "Profile", "Loading administrator data.")
-                }
-            }
+        MessageBlock(state.errorMessage, state.infoMessage)
+        SectionCard("Add user") {
+            OutlinedTextField(state.createUserForm.login, onCreateLoginChanged, label = { Text("Login") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(state.createUserForm.password, onCreatePasswordChanged, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(state.createUserForm.displayName, onCreateDisplayNameChanged, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
+            RoleCheck("Admin", state.createUserForm.admin, onCreateAdminChecked)
+            RoleCheck("Student", state.createUserForm.student, onCreateStudentChecked)
+            RoleCheck("Tutor", state.createUserForm.tutor, onCreateTutorChecked)
+            Button(onClick = { onClearMessages(); onCreateUserClick() }) { Text("Create user") }
+        }
+        Text("Users", fontWeight = FontWeight.Bold)
+        if (state.adminUsers.isEmpty()) Text("No users.", color = TextSecondary)
+        state.adminUsers.forEach { user ->
+            val inspector = state.adminInspectors[user.uid]
+            AdminUserCard(user, inspector, onUpdateUserRoles, onToggleInspector)
+        }
+        Text("Reports", fontWeight = FontWeight.Bold)
+        if (state.dashboardState.adminReports.isEmpty()) Text("No reports.", color = TextSecondary)
+        state.dashboardState.adminReports.forEach { ReportCard(it) }
+    }
+}
+
+@Composable private fun MainList(content: @Composable ColumnScope.() -> Unit) {
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content) }
+    }
+}
+
+@Composable private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            content()
         }
     }
 }
 
-@Composable
-fun MainShellScreen(
-    state: DashboardUiState,
-    currentUser: AppUser,
-    activeRole: UserRole,
-    onRefreshDashboard: () -> Unit,
-    onLogout: () -> Unit,
-    onOpenRolePicker: () -> Unit
-) {
-    val navController = rememberNavController()
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route ?: DashboardRoutes.HOME
-
-    Scaffold(
-        containerColor = AppBackground,
-        bottomBar = {
-            NavigationBar(containerColor = Color.White.copy(alpha = 0.96f)) {
-                DashboardTab.entries.forEach { tab ->
-                    val selected = currentRoute == tab.route
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon(), contentDescription = tab.label) },
-                        label = { Text(tab.label) },
-                        alwaysShowLabel = false,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = PwrNavy,
-                            selectedTextColor = PwrNavy,
-                            indicatorColor = PwrBlueSoft,
-                            unselectedIconColor = PwrBlueMuted,
-                            unselectedTextColor = PwrBlueMuted
-                        )
-                    )
-                }
-            }
-        }
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = DashboardRoutes.HOME,
-            modifier = Modifier.fillMaxSize().padding(padding)
-        ) {
-            composable(DashboardRoutes.HOME) {
-                DashboardHomeScreen(
-                    state = state,
-                    currentUser = currentUser,
-                    activeRole = activeRole,
-                    onRefreshDashboard = onRefreshDashboard,
-                    onQuickAction = { route -> navController.navigate(route) { launchSingleTop = true } }
-                )
-            }
-            composable(DashboardRoutes.MAP) { ModulePlaceholderScreen(Icons.Rounded.Map, "Map PWr", "Map module is ready for future integration with routes and rooms.") }
-            composable(DashboardRoutes.CHAT) { ModulePlaceholderScreen(Icons.Rounded.Forum, "PWr Chat", "Group chats and campus communication will appear here.") }
-            composable(DashboardRoutes.EXCHANGE) { ModulePlaceholderScreen(Icons.Rounded.SwapHoriz, "File Exchange", "Placeholder for material exchange module.") }
-            composable(DashboardRoutes.SCHEDULE) { ModulePlaceholderScreen(Icons.Rounded.CalendarMonth, "Class Schedule", "Extended timetable will appear here.") }
-            composable(DashboardRoutes.PROFILE) {
-                ProfileeScreen(currentUser = currentUser, activeRole = activeRole, onOpenRolePicker = onOpenRolePicker, onLogout = onLogout)
-            }
-        }
-    }
+@Composable private fun RoleCheck(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked, onChange); Text(label) }
 }
 
 @Composable
-private fun DashboardHomeScreen(
-    state: DashboardUiState,
-    currentUser: AppUser,
-    activeRole: UserRole,
-    onRefreshDashboard: () -> Unit,
-    onQuickAction: (String) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item { HomeHeader(state = state, currentUser = currentUser, activeRole = activeRole) }
-        item { XpCard(state = state) }
-        item { GpsCard(state = state) }
-        item { AiCard(state = state) }
-        item { QuickActions(actions = state.quickActions, onQuickAction = onQuickAction) }
-        item { SectionHeader(title = "Upcoming classes", actionLabel = if (state.isLoading) "Odswiezanie..." else "Odswiez", onAction = onRefreshDashboard) }
-        if (state.upcomingClasses.isEmpty()) {
-            item { EmptyCard(Icons.Rounded.Schedule, "No upcoming classes", "Once data appears in the classes collection, it will show up here automatically.") }
-        } else {
-            items(state.upcomingClasses, key = { it.id }) { classItem ->
-                UpcomingClassCard(classItem)
+private fun AdminUserCard(user: AppUser, inspector: AdminUserInspectorUi?, onUpdateUserRoles: (String, Boolean, Boolean) -> Unit, onToggleInspector: (String) -> Unit) {
+    var student by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.STUDENT)) }
+    var tutor by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.TUTOR)) }
+    SectionCard(user.displayName) {
+        Text("${user.login} | ${user.email}", color = TextSecondary)
+        Text("Roles: ${user.roles.joinToString { it.displayName }}", color = TextSecondary)
+        if (!user.hasRole(UserRole.ADMIN)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(student, { student = it }); Text("Student")
+                Checkbox(tutor, { tutor = it }); Text("Tutor")
+                Button(onClick = { onUpdateUserRoles(user.uid, student, tutor) }) { Text("Save") }
             }
         }
-    }
-}
-
-@Composable
-private fun HomeHeader(state: DashboardUiState, currentUser: AppUser, activeRole: UserRole) {
-    val summary = state.userSummary
-    val roleLabel = summary?.roleLabel ?: when (activeRole) {
-        UserRole.STUDENT -> "Student mode"
-        UserRole.LECTURER -> "Lecturer mode"
-        UserRole.ADMIN -> "Admin mode"
-    }
-
-    Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = Color.Transparent)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(PwrNavy, PwrNavyDark)), RoundedCornerShape(30.dp))
-                .padding(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        AvatarBubble(summary?.avatarUrl ?: currentUser.avatarUrl, summary?.initials ?: currentUser.initials())
-                        Column {
-                            Text(summary?.greeting ?: "Good morning,", color = PwrBlueSoft)
-                            Text(summary?.displayName ?: currentUser.displayName, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                            ElevatedAssistChip(onClick = {}, enabled = false, label = { Text(roleLabel, color = PwrNavy) }, modifier = Modifier.padding(top = 8.dp))
-                        }
-                    }
-                    Box {
-                        IconButton(onClick = {}, modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.14f))) {
-                            Icon(Icons.Rounded.NotificationsNone, contentDescription = "Notifications", tint = Color.White)
-                        }
-                        if ((summary?.notificationCount ?: 0) > 0) {
-                            Badge(modifier = Modifier.align(Alignment.TopEnd), containerColor = PwrRed) { Text((summary?.notificationCount ?: 0).toString()) }
-                        }
-                    }
+        OutlinedButton(onClick = { onToggleInspector(user.uid) }) { Text(if (inspector == null) "Inspect user" else "Hide details") }
+        if (inspector != null) {
+            if (inspector.isLoading) {
+                Text("Loading...")
+            } else {
+                Text("Availability", fontWeight = FontWeight.SemiBold)
+                if (inspector.availability.isEmpty()) Text("No availability.", color = TextSecondary)
+                inspector.availability.forEach { slot ->
+                    Text("- ${slot.dateLabel} ${slot.timeLabel} | ${slot.subject}", style = MaterialTheme.typography.bodySmall)
                 }
-                if (state.isLoading) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Color.White, trackColor = Color.White.copy(alpha = 0.2f))
+
+                Text("Bookings as tutor", fontWeight = FontWeight.SemiBold)
+                if (inspector.bookingsAsTutor.isEmpty()) Text("No tutor bookings.", color = TextSecondary)
+                inspector.bookingsAsTutor.forEach { lesson ->
+                    Text("- ${lesson.dateLabel} ${lesson.timeLabel} | ${lesson.subject}", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Text("Bookings as student", fontWeight = FontWeight.SemiBold)
+                if (inspector.bookingsAsStudent.isEmpty()) Text("No student bookings.", color = TextSecondary)
+                inspector.bookingsAsStudent.forEach { lesson ->
+                    Text("- ${lesson.dateLabel} ${lesson.timeLabel} | ${lesson.subject}", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Text("Reviews received", fontWeight = FontWeight.SemiBold)
+                if (inspector.reviewsReceived.isEmpty()) Text("No received reviews.", color = TextSecondary)
+                inspector.reviewsReceived.forEach { review ->
+                    Text("- ${review.rating}/5 ${review.studentDisplayName}: ${review.comment}", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Text("Reports received", fontWeight = FontWeight.SemiBold)
+                if (inspector.reportsReceived.isEmpty()) Text("No reports.", color = TextSecondary)
+                inspector.reportsReceived.forEach { report ->
+                    Text("- ${report.reason} | ${report.status}", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
     }
 }
 
-@Composable
-private fun AvatarBubble(avatarUrl: String?, initials: String) {
-    Box(modifier = Modifier.size(60.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-        if (!avatarUrl.isNullOrBlank()) {
-            AsyncImage(model = avatarUrl, contentDescription = "Avatar", modifier = Modifier.fillMaxSize().clip(CircleShape))
-        } else {
-            Text(initials, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+@Composable private fun TutorPicker(tutors: List<TutorSummaryUi>, selected: String, onPick: (String) -> Unit) {
+    if (tutors.isEmpty()) {
+        Text("No tutors found.", color = TextSecondary)
+        return
+    }
+    tutors.take(4).forEach { tutor ->
+        Surface(color = if (selected == tutor.uid) PwrBlueSoft else AppBackground, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().clickable { onPick(tutor.uid) }) {
+            Text("${tutor.displayName} (${tutor.uid})", modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
-@Composable
-private fun XpCard(state: DashboardUiState) {
-    val xp = state.xpSummary
-    val progress = if (xp.targetXp == 0) 0f else xp.currentXp.toFloat() / xp.targetXp.toFloat()
-    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(WarningSoft), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Bolt, contentDescription = null, tint = WarningText)
-                    }
-                    Column {
-                        Text("Your level", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                        Text("${xp.currentXp} XP / ${xp.targetXp} XP", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    xp.badges.take(2).forEach { badge ->
-                        Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(PwrBlueSoft), contentAlignment = Alignment.Center) { Text(badge) }
-                    }
-                }
-            }
-            LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp), color = PwrNavy, trackColor = AppSurfaceMuted)
-            Text(xp.helperLabel, style = MaterialTheme.typography.bodySmall, color = TextSecondary, modifier = Modifier.padding(top = 12.dp))
-        }
+@Composable private fun AvailabilityCard(slot: TutorAvailabilityUi, onBook: ((String) -> Unit)?) {
+    SectionCard(slot.subject) {
+        Text("Tutor: ${slot.tutorDisplayName}")
+        Text("${slot.dateLabel} | ${slot.timeLabel}")
+        if (onBook != null) Button(onClick = { onBook(slot.id) }, enabled = !slot.isBooked) { Text(if (slot.isBooked) "Booked" else "Book") }
     }
 }
 
-@Composable
-private fun GpsCard(state: DashboardUiState) {
-    val alarm = state.gpsAlarm
-    val background = if (alarm == null) PwrRedSoft else PwrRed
-    val textColor = if (alarm == null) PwrRed else Color.White
-    Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = background)) {
-        Row(modifier = Modifier.padding(18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = if (alarm == null) 1f else 0.18f)), contentAlignment = Alignment.Center) {
-                Icon(if (alarm == null) Icons.Rounded.Explore else Icons.Rounded.Shield, contentDescription = null, tint = textColor)
-            }
-            Column {
-                Text(alarm?.let { "Leave in ${it.minutesUntilLeave} minutes" } ?: "GPS alarm ready for integration", color = textColor, fontWeight = FontWeight.Bold)
-                Text(alarm?.courseTitle ?: "This card will appear when route and travel-time integration is added.", color = textColor, style = MaterialTheme.typography.bodyMedium)
-                if (alarm != null) {
-                    Text(alarm.locationLabel, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
-                }
-            }
-        }
+@Composable private fun LessonCard(lesson: LessonBookingUi) {
+    SectionCard(lesson.subject) {
+        Text("Tutor: ${lesson.tutorDisplayName}")
+        Text("Student: ${lesson.studentDisplayName}")
+        Text("${lesson.dateLabel} | ${lesson.timeLabel}")
+        Text("Status: ${lesson.status}")
     }
 }
 
-@Composable
-private fun AiCard(state: DashboardUiState) {
-    val ai = state.aiTutorPlan
-    Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(PwrBlueSoft), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Psychology, contentDescription = null, tint = PwrNavy)
-                    }
-                    Text(ai?.title ?: "AI Tutor", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                }
-                TextButton(onClick = {}) { Text("View") }
-            }
-            Text(ai?.description ?: "AI section is ready for data. After integration, a study plan or lecturer support will appear here.", color = TextSecondary, modifier = Modifier.padding(top = 10.dp))
-            Surface(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), color = AppSurfaceMuted, shape = RoundedCornerShape(22.dp)) {
-                Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(PwrNavy), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.Description, contentDescription = null, tint = Color.White)
-                        }
-                        Column {
-                            Text(ai?.taskTitle ?: "No active AI plan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(ai?.estimatedTimeLabel ?: "Waiting for integration", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                        }
-                    }
-                    Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = PwrNavy)
-                    }
-                }
-            }
-        }
+@Composable private fun ReviewCard(review: TutorReviewUi) {
+    SectionCard("${review.rating}/5 - ${review.tutorDisplayName}") {
+        Text(review.comment)
+        Text(review.createdAtLabel, color = TextSecondary)
     }
 }
 
-@Composable
-private fun QuickActions(actions: List<QuickActionUi>, onQuickAction: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Quick access", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            actions.forEach { action ->
-                val config = when (action.type) {
-                    QuickActionType.MAP -> Triple(Icons.Rounded.Place, action.label, SuccessSoft to SuccessText)
-                    QuickActionType.CHAT -> Triple(Icons.Rounded.ChatBubbleOutline, action.label, PurpleSoft to PurpleText)
-                    QuickActionType.EXCHANGE -> Triple(Icons.Rounded.SwapHoriz, action.label, OrangeSoft to OrangeText)
-                    QuickActionType.SCHEDULE -> Triple(Icons.Rounded.CalendarMonth, action.label, PwrBlueSoft to PwrNavy)
-                }
-                val route = action.route ?: return@forEach
-                QuickActionButton(
-                    modifier = Modifier.weight(1f),
-                    icon = config.first,
-                    label = config.second,
-                    background = config.third.first,
-                    contentColor = config.third.second,
-                    onClick = { onQuickAction(route) }
-                )
-            }
-        }
+@Composable private fun ReportCard(report: TutorReportUi) {
+    SectionCard("Report: ${report.reason}") {
+        Text("Tutor: ${report.tutorDisplayName}")
+        if (report.details.isNotBlank()) Text(report.details)
+        Text("Status: ${report.status}")
+        Text(report.createdAtLabel, color = TextSecondary)
     }
 }
 
-@Composable
-private fun QuickActionButton(modifier: Modifier, icon: ImageVector, label: String, background: Color, contentColor: Color, onClick: () -> Unit) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Surface(modifier = Modifier.fillMaxWidth().height(82.dp).clickable(onClick = onClick), color = background, shape = RoundedCornerShape(24.dp)) {
-            Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = label, tint = contentColor, modifier = Modifier.size(28.dp)) }
-        }
-        Text(label, style = MaterialTheme.typography.bodySmall, color = TextSecondary, textAlign = TextAlign.Center)
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String, actionLabel: String, onAction: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        TextButton(onClick = onAction) { Text(actionLabel) }
-    }
-}
-
-@Composable
-private fun UpcomingClassCard(classItem: UpcomingClassUi) {
-    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
-        Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.width(6.dp).height(54.dp).clip(RoundedCornerShape(12.dp)).background(PwrNavy))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(classItem.timeLabel, color = PwrNavy, fontWeight = FontWeight.ExtraBold)
-                Text(classItem.durationLabel, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(classItem.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(color = AppSurfaceMuted, shape = RoundedCornerShape(12.dp)) {
-                        Text(classItem.typeLabel, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.LocationOn, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(classItem.roomLabel, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfileeScreen(currentUser: AppUser, activeRole: UserRole, onOpenRolePicker: () -> Unit, onLogout: () -> Unit) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            Card(shape = RoundedCornerShape(30.dp), colors = CardDefaults.cardColors(containerColor = PwrNavy)) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AvatarBubble(currentUser.avatarUrl, currentUser.initials())
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(currentUser.displayName, color = Color.White, style = MaterialTheme.typography.headlineSmall)
-                            Text(currentUser.email, color = PwrBlueSoft)
-                        }
-                    }
-                    ElevatedAssistChip(
-                        onClick = {},
-                        enabled = false,
-                        label = { Text(when (activeRole) { UserRole.STUDENT -> "Student mode"; UserRole.LECTURER -> "Lecturer mode"; UserRole.ADMIN -> "Admin mode" }, color = PwrNavy) },
-                        modifier = Modifier.padding(top = 16.dp)
-                    )
-                }
-            }
-        }
-        item {
-            Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Profile i ustawienia", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("This tab is a placeholder for future settings and campus preferences.", color = TextSecondary)
-                    if (currentUser.hasDualRole()) {
-                        OutlinedButton(onClick = onOpenRolePicker, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Rounded.SwapHoriz, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Switch role")
-                        }
-                    }
-                    OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Rounded.Logout, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sign out")
-                    }
-                }
-            }
-        }
-        item { EmptyCard(Icons.Rounded.WorkspacePremium, "Profile sections in progress", "Achievements, notification settings, and account details will appear here.") }
-    }
-}
-
-@Composable
-private fun ModulePlaceholderScreen(icon: ImageVector, title: String, description: String) {
-    Box(modifier = Modifier.fillMaxSize().background(AppBackground).padding(20.dp), contentAlignment = Alignment.Center) {
-        EmptyCard(icon = icon, title = title, description = description)
-    }
-}
-
-@Composable
-private fun EmptyCard(icon: ImageVector, title: String, description: String) {
-    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
-        Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(AppSurfaceMuted), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = PwrNavy)
-            }
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, textAlign = TextAlign.Center)
-        }
-    }
+@Composable private fun MessageBlock(error: String?, info: String?) {
+    if (error != null) Surface(color = PwrRed.copy(alpha = 0.08f), shape = RoundedCornerShape(12.dp)) { Text(error, color = PwrRed, modifier = Modifier.padding(10.dp)) }
+    if (info != null) Surface(color = PwrBlueSoft, shape = RoundedCornerShape(12.dp)) { Text(info, color = PwrNavy, modifier = Modifier.padding(10.dp)) }
 }
 
 private fun DashboardTab.icon(): ImageVector = when (this) {
     DashboardTab.HOME -> Icons.Rounded.Home
-    DashboardTab.MAP -> Icons.Rounded.Map
-    DashboardTab.CHAT -> Icons.Rounded.ChatBubbleOutline
+    DashboardTab.CALENDAR -> Icons.Rounded.CalendarMonth
+    DashboardTab.REVIEWS -> Icons.Rounded.MenuBook
     DashboardTab.PROFILE -> Icons.Rounded.Person
 }
-
 
 
 
