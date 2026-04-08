@@ -100,8 +100,7 @@ class FirebaseAuthRepository(
                 "createdBy" to firebaseUser.uid,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
-            ),
-            SetOptions.merge()
+            )
         ).await()
 
         return requireNotNull(getCurrentUser()) {
