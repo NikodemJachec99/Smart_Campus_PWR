@@ -90,30 +90,35 @@ class TutoringRepository(
         tutor: AppUser,
         subject: String,
         date: String,
-        startHour: Int,
-        endHour: Int
+        startHour: String,
+        endHour: String
     ) {
         val normalizedSubject = subject.trim()
         val normalizedDate = date.trim()
+        val normalizedStart = startHour.trim()
+        val normalizedEnd = endHour.trim()
 
         require(normalizedSubject.isNotEmpty()) { "Subject is required." }
         require(normalizedDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { "Date must use YYYY-MM-DD format." }
-        require(startHour in 0..23 && endHour in 1..24 && endHour > startHour) {
-            "Hour range is invalid."
-        }
+        require(normalizedStart.isNotEmpty() && normalizedEnd.isNotEmpty()) { "Start and end hours are required." }
 
         val payload = mapOf(
             "tutorId" to tutor.uid,
             "tutorDisplayName" to tutor.displayName,
             "subject" to normalizedSubject,
             "date" to normalizedDate,
-            "startHour" to startHour,
-            "endHour" to endHour,
+            "startHour" to normalizedStart,
+            "endHour" to normalizedEnd,
             "isBooked" to false,
             "createdAt" to FieldValue.serverTimestamp()
         )
 
         firestore.collection("tutor_availability").add(payload).await()
+    }
+
+    suspend fun deleteAvailability(slotId: String) {
+        require(slotId.isNotEmpty()) { "Slot ID cannot be empty." }
+        firestore.collection("tutor_availability").document(slotId).delete().await()
     }
 
     suspend fun bookAvailability(slotId: String, student: AppUser) {
@@ -135,8 +140,10 @@ class TutoringRepository(
             val tutorDisplayName = slotSnapshot.getString("tutorDisplayName").orEmpty()
             val subject = slotSnapshot.getString("subject").orEmpty()
             val date = slotSnapshot.getString("date").orEmpty()
-            val startHour = (slotSnapshot.getLong("startHour") ?: 0L).toInt()
-            val endHour = (slotSnapshot.getLong("endHour") ?: 0L).toInt()
+
+
+            val startHour = slotSnapshot.get("startHour")?.toString().orEmpty()
+            val endHour = slotSnapshot.get("endHour")?.toString().orEmpty()
 
             transaction.update(
                 slotRef,
@@ -161,6 +168,26 @@ class TutoringRepository(
                     "endHour" to endHour,
                     "status" to "booked",
                     "createdAt" to FieldValue.serverTimestamp()
+                )
+            )
+        }.await()
+    }
+
+    suspend fun cancelBooking(bookingId: String, slotId: String) {
+        require(bookingId.isNotEmpty() && slotId.isNotEmpty()) { "IDs cannot be empty." }
+
+        val bookingRef = firestore.collection("bookings").document(bookingId)
+        val slotRef = firestore.collection("tutor_availability").document(slotId)
+
+        firestore.runTransaction { transaction ->
+            transaction.update(bookingRef, "status", "cancelled")
+
+            transaction.update(
+                slotRef,
+                mapOf(
+                    "isBooked" to false,
+                    "bookedBy" to FieldValue.delete(),
+                    "bookedAt" to FieldValue.delete()
                 )
             )
         }.await()
@@ -365,12 +392,16 @@ class TutoringRepository(
                 .documents
                 .mapNotNull(::toUser)
         } catch (_: Exception) {
-            firestore.collection("users")
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toUser)
-                .filter { appUser -> appUser.hasRole(UserRole.TUTOR) }
+            try {
+                firestore.collection("users")
+                    .get()
+                    .await()
+                    .documents
+                    .mapNotNull(::toUser)
+                    .filter { appUser -> appUser.hasRole(UserRole.TUTOR) }
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
 
         return users.map { appUser ->
@@ -399,8 +430,10 @@ class TutoringRepository(
         val tutorId = document.getString("tutorId") ?: return null
         val subject = document.getString("subject") ?: return null
         val date = document.getString("date") ?: return null
-        val startHour = (document.getLong("startHour") ?: return null).toInt()
-        val endHour = (document.getLong("endHour") ?: return null).toInt()
+
+        val startHour = document.get("startHour")?.toString() ?: return null
+        val endHour = document.get("endHour")?.toString() ?: return null
+
         val tutorDisplayName = document.getString("tutorDisplayName").orEmpty().ifBlank { tutorId }
 
         return TutorAvailabilityUi(
@@ -420,11 +453,14 @@ class TutoringRepository(
         val studentId = document.getString("studentId") ?: return null
         val subject = document.getString("subject") ?: return null
         val date = document.getString("date") ?: return null
-        val startHour = (document.getLong("startHour") ?: return null).toInt()
-        val endHour = (document.getLong("endHour") ?: return null).toInt()
+
+        val startHour = document.get("startHour")?.toString() ?: return null
+        val endHour = document.get("endHour")?.toString() ?: return null
+        val availabilityId = document.getString("availabilityId").orEmpty()
 
         return LessonBookingUi(
             id = document.id,
+            availabilityId = availabilityId,
             tutorId = tutorId,
             tutorDisplayName = document.getString("tutorDisplayName").orEmpty().ifBlank { tutorId },
             studentId = studentId,

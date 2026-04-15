@@ -199,11 +199,11 @@ class SmartCampusViewModel(
         }
 
         val form = state.availabilityForm
-        val start = form.startHour.toIntOrNull()
-        val end = form.endHour.toIntOrNull()
+        val start = form.startHour.trim()
+        val end = form.endHour.trim()
 
-        if (start == null || end == null) {
-            _uiState.update { it.copy(errorMessage = "Start and end hour must be numeric.") }
+        if (start.isBlank() || end.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Start and end hour are required.") }
             return
         }
 
@@ -223,6 +223,20 @@ class SmartCampusViewModel(
                 _uiState.update {
                     it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error))
                 }
+            }
+        }
+    }
+
+    fun deleteAvailabilitySlot(slotId: String) {
+        val user = _uiState.value.currentUser ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                tutoringRepository.deleteAvailability(slotId)
+                _uiState.update { it.copy(isMainSubmitting = false, infoMessage = "Availability slot removed.") }
+                loadMainData(user)
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error)) }
             }
         }
     }
@@ -251,6 +265,20 @@ class SmartCampusViewModel(
                 _uiState.update {
                     it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error))
                 }
+            }
+        }
+    }
+
+    fun cancelLessonBooking(bookingId: String, slotId: String) {
+        val user = _uiState.value.currentUser ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                tutoringRepository.cancelBooking(bookingId, slotId)
+                _uiState.update { it.copy(isMainSubmitting = false, infoMessage = "Lesson cancelled.") }
+                loadMainData(user)
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error)) }
             }
         }
     }

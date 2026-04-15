@@ -20,28 +20,29 @@ data class TutorAvailabilityUi(
     val tutorDisplayName: String,
     val subject: String,
     val dateLabel: String,
-    val startHour: Int,
-    val endHour: Int,
+    val startHour: String,
+    val endHour: String,
     val isBooked: Boolean
 ) {
     val timeLabel: String
-        get() = "%02d:00 - %02d:00".format(startHour, endHour)
+        get() = "$startHour - $endHour"
 }
 
 data class LessonBookingUi(
     val id: String,
+    val availabilityId: String,
     val tutorId: String,
     val tutorDisplayName: String,
     val studentId: String,
     val studentDisplayName: String,
     val subject: String,
     val dateLabel: String,
-    val startHour: Int,
-    val endHour: Int,
+    val startHour: String,
+    val endHour: String,
     val status: String
 ) {
     val timeLabel: String
-        get() = "%02d:00 - %02d:00".format(startHour, endHour)
+        get() = "$startHour - $endHour"
 }
 
 data class TutorReviewUi(

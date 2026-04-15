@@ -19,6 +19,7 @@ import Smart.Campus.PWR.ui.theme.PwrRed
 import Smart.Campus.PWR.ui.theme.TextSecondary
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,24 +27,31 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -54,14 +62,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,6 +80,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +105,9 @@ fun MainShellScreen(
     onReportReasonChanged: (String) -> Unit,
     onReportDetailsChanged: (String) -> Unit,
     onSubmitReport: () -> Unit,
-    onClearMessages: () -> Unit
+    onClearMessages: () -> Unit,
+    onDeleteAvailability: (String) -> Unit,
+    onCancelBooking: (String, String) -> Unit
 ) {
     val currentUser = state.currentUser ?: return
     val activeRole = state.activeRole ?: return
@@ -150,32 +165,119 @@ fun MainShellScreen(
                     Text(if (activeRole == UserRole.STUDENT) "My student lessons" else "My tutor lessons", fontWeight = FontWeight.Bold)
                     val lessons = if (activeRole == UserRole.STUDENT) state.dashboardState.myStudentBookings else state.dashboardState.myTutorBookings
                     if (lessons.isEmpty()) Text("No lessons yet.", color = TextSecondary)
-                    lessons.forEach { LessonCard(it) }
+                    lessons.forEach { LessonCard(it, onCancel = onCancelBooking) }
                 }
             }
             composable(DashboardRoutes.CALENDAR) {
                 MainList {
                     MessageBlock(state.errorMessage, state.infoMessage)
                     if (activeRole == UserRole.TUTOR) {
-                        SectionCard("Set availability") {
-                            OutlinedTextField(state.availabilityForm.subject, onAvailabilitySubjectChanged, label = { Text("Subject") }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(state.availabilityForm.date, onAvailabilityDateChanged, label = { Text("Date YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth())
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(state.availabilityForm.startHour, onAvailabilityStartHourChanged, label = { Text("Start") }, modifier = Modifier.weight(1f))
-                                OutlinedTextField(state.availabilityForm.endHour, onAvailabilityEndHourChanged, label = { Text("End") }, modifier = Modifier.weight(1f))
+                        var showDatePicker by remember { mutableStateOf(false) }
+                        val datePickerState = rememberDatePickerState()
+
+                        if (showDatePicker) {
+                            DatePickerDialog(
+                                onDismissRequest = { showDatePicker = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        datePickerState.selectedDateMillis?.let { millis ->
+                                            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            onAvailabilityDateChanged(formatter.format(Date(millis)))
+                                        }
+                                        showDatePicker = false
+                                    }) { Text("OK") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                                }
+                            ) {
+                                DatePicker(state = datePickerState)
                             }
+                        }
+
+                        SectionCard("Set availability") {
+                            OutlinedTextField(
+                                value = state.availabilityForm.subject,
+                                onValueChange = onAvailabilitySubjectChanged,
+                                label = { Text("Subject") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Box(modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }) {
+                                OutlinedTextField(
+                                    value = state.availabilityForm.date,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    enabled = false,
+                                    label = { Text("Date") },
+                                    trailingIcon = { Icon(Icons.Rounded.CalendarMonth, contentDescription = null) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = state.availabilityForm.startHour,
+                                    onValueChange = onAvailabilityStartHourChanged,
+                                    label = { Text("Start") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = state.availabilityForm.endHour,
+                                    onValueChange = onAvailabilityEndHourChanged,
+                                    label = { Text("End") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+
                             Button(onClick = { onClearMessages(); onAddAvailability() }) { Text("Add slot") }
                         }
+
                         Text("My availability", fontWeight = FontWeight.Bold)
                         if (state.dashboardState.myAvailability.isEmpty()) Text("No availability slots.", color = TextSecondary)
-                        state.dashboardState.myAvailability.forEach { AvailabilityCard(it, null) }
+                        state.dashboardState.myAvailability.forEach {
+                            AvailabilityCard(it, onBook = null, onDelete = onDeleteAvailability)
+                        }
                     } else {
                         Text("My booked lessons", fontWeight = FontWeight.Bold)
                         if (state.dashboardState.myStudentBookings.isEmpty()) Text("No booked lessons.", color = TextSecondary)
-                        state.dashboardState.myStudentBookings.forEach { LessonCard(it) }
+                        state.dashboardState.myStudentBookings.forEach { LessonCard(it, onCancel = onCancelBooking) }
+
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text("Open tutor slots", fontWeight = FontWeight.Bold)
-                        if (state.dashboardState.availableTutorSlots.isEmpty()) Text("No open slots.", color = TextSecondary)
-                        state.dashboardState.availableTutorSlots.forEach { AvailabilityCard(it, onBookTutorSlot) }
+
+                        var searchQuery by remember { mutableStateOf("") }
+
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = { Text("Search subject or tutor...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "Search") }
+                        )
+
+                        val filteredSlots = state.dashboardState.availableTutorSlots.filter { slot ->
+                            searchQuery.isBlank() ||
+                                    slot.subject.contains(searchQuery, ignoreCase = true) ||
+                                    slot.tutorDisplayName.contains(searchQuery, ignoreCase = true)
+                        }
+
+                        if (filteredSlots.isEmpty()) {
+                            Text(
+                                if (searchQuery.isBlank()) "No open slots." else "No slots match your search.",
+                                color = TextSecondary
+                            )
+                        }
+                        filteredSlots.forEach { AvailabilityCard(it, onBook = onBookTutorSlot) }
                     }
                 }
             }
@@ -355,20 +457,49 @@ private fun AdminUserCard(user: AppUser, inspector: AdminUserInspectorUi?, onUpd
     }
 }
 
-@Composable private fun AvailabilityCard(slot: TutorAvailabilityUi, onBook: ((String) -> Unit)?) {
+@Composable private fun AvailabilityCard(
+    slot: TutorAvailabilityUi,
+    onBook: ((String) -> Unit)?,
+    onDelete: ((String) -> Unit)? = null
+) {
     SectionCard(slot.subject) {
-        Text("Tutor: ${slot.tutorDisplayName}")
-        Text("${slot.dateLabel} | ${slot.timeLabel}")
-        if (onBook != null) Button(onClick = { onBook(slot.id) }, enabled = !slot.isBooked) { Text(if (slot.isBooked) "Booked" else "Book") }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("Tutor: ${slot.tutorDisplayName}")
+                Text("${slot.dateLabel} | ${slot.timeLabel}")
+            }
+            if (onDelete != null && !slot.isBooked) {
+                OutlinedButton(onClick = { onDelete(slot.id) }) {
+                    Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = PwrRed)
+                }
+            }
+            if (onBook != null) {
+                Button(onClick = { onBook(slot.id) }, enabled = !slot.isBooked) {
+                    Text(if (slot.isBooked) "Booked" else "Book")
+                }
+            }
+        }
     }
 }
 
-@Composable private fun LessonCard(lesson: LessonBookingUi) {
+@Composable private fun LessonCard(
+    lesson: LessonBookingUi,
+    onCancel: ((String, String) -> Unit)? = null
+) {
     SectionCard(lesson.subject) {
-        Text("Tutor: ${lesson.tutorDisplayName}")
-        Text("Student: ${lesson.studentDisplayName}")
-        Text("${lesson.dateLabel} | ${lesson.timeLabel}")
-        Text("Status: ${lesson.status}")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("Tutor: ${lesson.tutorDisplayName}")
+                Text("Student: ${lesson.studentDisplayName}")
+                Text("${lesson.dateLabel} | ${lesson.timeLabel}")
+                Text("Status: ${lesson.status.uppercase()}", fontWeight = FontWeight.SemiBold, color = if (lesson.status == "cancelled") PwrRed else PwrNavy)
+            }
+            if (onCancel != null && lesson.status == "booked") {
+                OutlinedButton(onClick = { onCancel(lesson.id, lesson.availabilityId) }) {
+                    Text("Cancel", color = PwrRed)
+                }
+            }
+        }
     }
 }
 
@@ -398,8 +529,46 @@ private fun DashboardTab.icon(): ImageVector = when (this) {
     DashboardTab.CALENDAR -> Icons.Rounded.CalendarMonth
     DashboardTab.REVIEWS -> Icons.Rounded.MenuBook
     DashboardTab.PROFILE -> Icons.Rounded.Person
+    else -> Icons.Rounded.MenuBook
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HourDropdown(
+    label: String,
+    value: String,
+    onValueChanged: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
 
-
-
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = if (value.isNotBlank()) "$value:00" else "",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            (0..23).forEach { hour ->
+                DropdownMenuItem(
+                    text = { Text("$hour:00") },
+                    onClick = {
+                        onValueChanged(hour.toString())
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}

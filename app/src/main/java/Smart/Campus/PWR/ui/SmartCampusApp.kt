@@ -97,7 +97,9 @@ fun SmartCampusApp(viewModel: SmartCampusViewModel = viewModel()) {
                     onReportReasonChanged = viewModel::onReportReasonChanged,
                     onReportDetailsChanged = viewModel::onReportDetailsChanged,
                     onSubmitReport = viewModel::submitReport,
-                    onClearMessages = viewModel::clearMessages
+                    onClearMessages = viewModel::clearMessages,
+                    onDeleteAvailability = viewModel::deleteAvailabilitySlot,
+                    onCancelBooking = viewModel::cancelLessonBooking
                 )
             } else {
                 LoadingScreen()
