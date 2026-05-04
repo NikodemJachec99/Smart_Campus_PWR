@@ -18,63 +18,20 @@ import Smart.Campus.PWR.ui.theme.PwrNavy
 import Smart.Campus.PWR.ui.theme.PwrRed
 import Smart.Campus.PWR.ui.theme.TextSecondary
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Logout
-import androidx.compose.material.icons.rounded.MenuBook
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -173,7 +130,24 @@ fun MainShellScreen(
                     MessageBlock(state.errorMessage, state.infoMessage)
                     if (activeRole == UserRole.TUTOR) {
                         var showDatePicker by remember { mutableStateOf(false) }
-                        val datePickerState = rememberDatePickerState()
+                        var showStartTimePicker by remember { mutableStateOf(false) }
+                        var showEndTimePicker by remember { mutableStateOf(false) }
+
+                        val datePickerState = rememberDatePickerState(
+                            selectableDates = object : SelectableDates {
+                                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                                    val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+                                    calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                                    calendar.set(java.util.Calendar.MINUTE, 0)
+                                    calendar.set(java.util.Calendar.SECOND, 0)
+                                    calendar.set(java.util.Calendar.MILLISECOND, 0)
+                                    return utcTimeMillis >= calendar.timeInMillis
+                                }
+                            }
+                        )
+
+                        val startTimeState = rememberTimePickerState(initialHour = 12, initialMinute = 0)
+                        val endTimeState = rememberTimePickerState(initialHour = 13, initialMinute = 0)
 
                         if (showDatePicker) {
                             DatePickerDialog(
@@ -186,13 +160,36 @@ fun MainShellScreen(
                                         }
                                         showDatePicker = false
                                     }) { Text("OK") }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
                                 }
-                            ) {
-                                DatePicker(state = datePickerState)
-                            }
+                            ) { DatePicker(state = datePickerState) }
+                        }
+
+                        if (showStartTimePicker) {
+                            TimePickerDialogWrapper(
+                                title = "Select start time",
+                                onDismissRequest = { showStartTimePicker = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val formatted = String.format("%02d:%02d", startTimeState.hour, startTimeState.minute)
+                                        onAvailabilityStartHourChanged(formatted)
+                                        showStartTimePicker = false
+                                    }) { Text("OK") }
+                                }
+                            ) { TimePicker(state = startTimeState) }
+                        }
+
+                        if (showEndTimePicker) {
+                            TimePickerDialogWrapper(
+                                title = "Select end time",
+                                onDismissRequest = { showEndTimePicker = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val formatted = String.format("%02d:%02d", endTimeState.hour, endTimeState.minute)
+                                        onAvailabilityEndHourChanged(formatted)
+                                        showEndTimePicker = false
+                                    }) { Text("OK") }
+                                }
+                            ) { TimePicker(state = endTimeState) }
                         }
 
                         SectionCard("Set availability") {
@@ -210,74 +207,147 @@ fun MainShellScreen(
                                     readOnly = true,
                                     enabled = false,
                                     label = { Text("Date") },
-                                    trailingIcon = { Icon(Icons.Rounded.CalendarMonth, contentDescription = null) },
+                                    trailingIcon = { Icon(Icons.Rounded.CalendarMonth, null) },
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                    colors = OutlinedTextFieldDefaults.colors(
                                         disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        disabledBorderColor = MaterialTheme.colorScheme.outline
                                     )
                                 )
                             }
 
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(
-                                    value = state.availabilityForm.startHour,
-                                    onValueChange = onAvailabilityStartHourChanged,
-                                    label = { Text("Start") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = state.availabilityForm.endHour,
-                                    onValueChange = onAvailabilityEndHourChanged,
-                                    label = { Text("End") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
+                                Box(modifier = Modifier.weight(1f).clickable { showStartTimePicker = true }) {
+                                    OutlinedTextField(
+                                        value = state.availabilityForm.startHour,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        enabled = false,
+                                        label = { Text("Start") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                            disabledBorderColor = MaterialTheme.colorScheme.outline
+                                        )
+                                    )
+                                }
+                                Box(modifier = Modifier.weight(1f).clickable { showEndTimePicker = true }) {
+                                    OutlinedTextField(
+                                        value = state.availabilityForm.endHour,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        enabled = false,
+                                        label = { Text("End") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                            disabledBorderColor = MaterialTheme.colorScheme.outline
+                                        )
+                                    )
+                                }
                             }
 
-                            Button(onClick = { onClearMessages(); onAddAvailability() }) { Text("Add slot") }
+                            Button(
+                                onClick = { onClearMessages(); onAddAvailability() },
+                                enabled = state.availabilityForm.subject.isNotBlank() && state.availabilityForm.date.isNotBlank() && state.availabilityForm.startHour.isNotBlank()
+                            ) { Text("Add slot") }
                         }
 
-                        Text("My availability", fontWeight = FontWeight.Bold)
-                        if (state.dashboardState.myAvailability.isEmpty()) Text("No availability slots.", color = TextSecondary)
-                        state.dashboardState.myAvailability.forEach {
-                            AvailabilityCard(it, onBook = null, onDelete = onDeleteAvailability)
-                        }
+                        Text("Scheduled lessons", fontWeight = FontWeight.Bold)
+                        val bookedLessons = state.dashboardState.myTutorBookings.filter { it.status == "booked" }
+                        if (bookedLessons.isEmpty()) Text("No scheduled lessons.", color = TextSecondary)
+                        bookedLessons.forEach { LessonCard(it, onCancel = onCancelBooking) }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text("Open availability slots", fontWeight = FontWeight.Bold)
+                        val openSlots = state.dashboardState.myAvailability.filter { !it.isBooked }
+                        if (openSlots.isEmpty()) Text("No open slots.", color = TextSecondary)
+                        openSlots.forEach { AvailabilityCard(it, onBook = null, onDelete = onDeleteAvailability) }
+
                     } else {
+                        var searchQuery by remember { mutableStateOf("") }
+                        var filterDate by remember { mutableStateOf("") }
+                        var showDatePicker by remember { mutableStateOf(false) }
+                        val datePickerState = rememberDatePickerState()
+
                         Text("My booked lessons", fontWeight = FontWeight.Bold)
                         if (state.dashboardState.myStudentBookings.isEmpty()) Text("No booked lessons.", color = TextSecondary)
                         state.dashboardState.myStudentBookings.forEach { LessonCard(it, onCancel = onCancelBooking) }
 
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Search & Filter", fontWeight = FontWeight.Bold)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                label = { Text("Subject or tutor") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) }
+                            )
+
+                            OutlinedButton(
+                                onClick = { showDatePicker = true },
+                                modifier = Modifier.height(56.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Rounded.CalendarMonth, contentDescription = "Filter by date")
+                            }
+                        }
+
+                        if (filterDate.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Date: $filterDate", color = PwrNavy, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = { filterDate = "" }) {
+                                    Text("Clear date", color = PwrRed)
+                                }
+                            }
+                        }
+
+                        val filteredSlots = state.dashboardState.availableTutorSlots.filter { slot ->
+                            val matchesText = searchQuery.isBlank() ||
+                                    slot.subject.contains(searchQuery, ignoreCase = true) ||
+                                    slot.tutorDisplayName.contains(searchQuery, ignoreCase = true)
+
+                            val matchesDate = filterDate.isBlank() || slot.dateLabel == filterDate
+
+                            matchesText && matchesDate
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("Open tutor slots", fontWeight = FontWeight.Bold)
 
-                        var searchQuery by remember { mutableStateOf("") }
-
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            label = { Text("Search subject or tutor...") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "Search") }
-                        )
-
-                        val filteredSlots = state.dashboardState.availableTutorSlots.filter { slot ->
-                            searchQuery.isBlank() ||
-                                    slot.subject.contains(searchQuery, ignoreCase = true) ||
-                                    slot.tutorDisplayName.contains(searchQuery, ignoreCase = true)
-                        }
-
                         if (filteredSlots.isEmpty()) {
-                            Text(
-                                if (searchQuery.isBlank()) "No open slots." else "No slots match your search.",
-                                color = TextSecondary
-                            )
+                            Text("No slots match your search.", color = TextSecondary)
                         }
+
                         filteredSlots.forEach { AvailabilityCard(it, onBook = onBookTutorSlot) }
+
+                        if (showDatePicker) {
+                            DatePickerDialog(
+                                onDismissRequest = { showDatePicker = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        datePickerState.selectedDateMillis?.let { millis ->
+                                            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            filterDate = formatter.format(Date(millis))
+                                        }
+                                        showDatePicker = false
+                                    }) { Text("Filter") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                                }
+                            ) {
+                                DatePicker(state = datePickerState)
+                            }
+                        }
                     }
                 }
             }
@@ -496,7 +566,7 @@ private fun AdminUserCard(user: AppUser, inspector: AdminUserInspectorUi?, onUpd
             }
             if (onCancel != null && lesson.status == "booked") {
                 OutlinedButton(onClick = { onCancel(lesson.id, lesson.availabilityId) }) {
-                    Text("Cancel", color = PwrRed)
+                    Text("Cancel Lesson", color = PwrRed)
                 }
             }
         }
@@ -529,45 +599,34 @@ private fun DashboardTab.icon(): ImageVector = when (this) {
     DashboardTab.CALENDAR -> Icons.Rounded.CalendarMonth
     DashboardTab.REVIEWS -> Icons.Rounded.MenuBook
     DashboardTab.PROFILE -> Icons.Rounded.Person
-    else -> Icons.Rounded.MenuBook
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HourDropdown(
-    label: String,
-    value: String,
-    onValueChanged: (String) -> Unit,
-    modifier: Modifier = Modifier
+fun TimePickerDialogWrapper(
+    title: String,
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    content: @Composable () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = modifier
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        OutlinedTextField(
-            value = if (value.isNotBlank()) "$value:00" else "",
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier.menuAnchor()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            modifier = Modifier.padding(16.dp),
+            color = AppSurface
         ) {
-            (0..23).forEach { hour ->
-                DropdownMenuItem(
-                    text = { Text("$hour:00") },
-                    onClick = {
-                        onValueChanged(hour.toString())
-                        expanded = false
-                    }
-                )
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(title, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 20.dp))
+                content()
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    confirmButton()
+                }
             }
         }
     }
