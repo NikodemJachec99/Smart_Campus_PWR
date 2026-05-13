@@ -232,8 +232,22 @@ class SmartCampusViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
             try {
-                tutoringRepository.deleteAvailability(slotId)
+                tutoringRepository.deleteAvailability(slotId, user)
                 _uiState.update { it.copy(isMainSubmitting = false, infoMessage = "Availability slot removed.") }
+                loadMainData(user)
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error)) }
+            }
+        }
+    }
+
+    fun updateAvailabilitySlot(slotId: String, newSubject: String, newDate: String, newStartHour: String, newEndHour: String) {
+        val user = _uiState.value.currentUser ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                tutoringRepository.updateAvailability(slotId, newSubject, newDate, newStartHour, newEndHour, user)
+                _uiState.update { it.copy(isMainSubmitting = false, infoMessage = "Availability slot updated.") }
                 loadMainData(user)
             } catch (error: Throwable) {
                 _uiState.update { it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error)) }
@@ -406,21 +420,23 @@ class SmartCampusViewModel(
     }
 
     fun refreshAdminUsers() {
-        val user = _uiState.value.currentUser
-        if (user == null || !user.hasRole(UserRole.ADMIN)) {
-            return
-        }
+        val user = _uiState.value.currentUser ?: return
+        if (!user.hasRole(UserRole.ADMIN)) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isAdminUsersLoading = true, errorMessage = null, infoMessage = null) }
             try {
                 val users = authRepository.listUsers()
                 val reports = tutoringRepository.loadAdminReports()
+                val allSlots = tutoringRepository.getAllAvailability()
                 _uiState.update {
                     it.copy(
                         isAdminUsersLoading = false,
                         adminUsers = users,
-                        dashboardState = it.dashboardState.copy(adminReports = reports)
+                        dashboardState = it.dashboardState.copy(
+                            adminReports = reports,
+                            availableTutorSlots = allSlots
+                        )
                     )
                 }
             } catch (error: Throwable) {
@@ -495,6 +511,19 @@ class SmartCampusViewModel(
                 _uiState.update {
                     it.copy(isAdminSubmitting = false, errorMessage = authRepository.userMessage(error))
                 }
+            }
+        }
+    }
+
+    fun deleteUserByAdmin(uid: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAdminSubmitting = true, errorMessage = null, infoMessage = null) }
+            try {
+                authRepository.adminDeleteUser(uid)
+                refreshAdminUsers()
+                _uiState.update { it.copy(isAdminSubmitting = false, infoMessage = "User removed.") }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(isAdminSubmitting = false, errorMessage = authRepository.userMessage(error)) }
             }
         }
     }
@@ -578,6 +607,7 @@ class SmartCampusViewModel(
             SessionDestination.ADMIN_PANEL -> {
                 val users = authRepository.listUsers()
                 val reports = tutoringRepository.loadAdminReports()
+                val allSlots = tutoringRepository.getAllAvailability()
                 _uiState.update {
                     it.copy(
                         isBootstrapping = false,
@@ -586,7 +616,10 @@ class SmartCampusViewModel(
                         currentUser = user,
                         activeRole = null,
                         adminUsers = users,
-                        dashboardState = DashboardUiState(adminReports = reports),
+                        dashboardState = DashboardUiState(
+                            adminReports = reports,
+                            availableTutorSlots = allSlots
+                        ),
                         passwordInput = "",
                         errorMessage = null,
                         registerForm = RegisterFormState()

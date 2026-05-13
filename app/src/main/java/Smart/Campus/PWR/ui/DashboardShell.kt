@@ -64,12 +64,27 @@ fun MainShellScreen(
     onSubmitReport: () -> Unit,
     onClearMessages: () -> Unit,
     onDeleteAvailability: (String) -> Unit,
+    onUpdateAvailability: (String, String, String, String, String) -> Unit,
     onCancelBooking: (String, String) -> Unit
 ) {
     val currentUser = state.currentUser ?: return
     val activeRole = state.activeRole ?: return
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route ?: DashboardRoutes.HOME
+    val isAdmin = currentUser.hasRole(UserRole.ADMIN)
+
+    var editingSlot by remember { mutableStateOf<TutorAvailabilityUi?>(null) }
+
+    if (editingSlot != null) {
+        EditSlotDialog(
+            slot = editingSlot!!,
+            onDismiss = { editingSlot = null },
+            onConfirm = { subject, date, start, end ->
+                onUpdateAvailability(editingSlot!!.id, subject, date, start, end)
+                editingSlot = null
+            }
+        )
+    }
 
     Scaffold(
         containerColor = AppBackground,
@@ -263,7 +278,9 @@ fun MainShellScreen(
                         Text("Open availability slots", fontWeight = FontWeight.Bold)
                         val openSlots = state.dashboardState.myAvailability.filter { !it.isBooked }
                         if (openSlots.isEmpty()) Text("No open slots.", color = TextSecondary)
-                        openSlots.forEach { AvailabilityCard(it, onBook = null, onDelete = onDeleteAvailability) }
+                        openSlots.forEach {
+                            AvailabilityCard(it, onBook = null, onDelete = onDeleteAvailability, onEdit = { editingSlot = it }, isAdmin = isAdmin)
+                        }
 
                     } else {
                         var searchQuery by remember { mutableStateOf("") }
@@ -327,7 +344,15 @@ fun MainShellScreen(
                             Text("No slots match your search.", color = TextSecondary)
                         }
 
-                        filteredSlots.forEach { AvailabilityCard(it, onBook = onBookTutorSlot) }
+                        filteredSlots.forEach { slot ->
+                            AvailabilityCard(
+                                slot = slot,
+                                onBook = onBookTutorSlot,
+                                onDelete = if (isAdmin) onDeleteAvailability else null,
+                                onEdit = if (isAdmin) { { editingSlot = it } } else null,
+                                isAdmin = isAdmin
+                            )
+                        }
 
                         if (showDatePicker) {
                             DatePickerDialog(
@@ -411,8 +436,24 @@ fun AdminShellScreen(
     onCreateUserClick: () -> Unit,
     onUpdateUserRoles: (String, Boolean, Boolean) -> Unit,
     onToggleInspector: (String) -> Unit,
+    onDeleteUser: (String) -> Unit,
+    onDeleteAvailability: (String) -> Unit,
+    onUpdateAvailability: (String, String, String, String, String) -> Unit,
     onClearMessages: () -> Unit
 ) {
+    var editingSlot by remember { mutableStateOf<TutorAvailabilityUi?>(null) }
+
+    if (editingSlot != null) {
+        EditSlotDialog(
+            slot = editingSlot!!,
+            onDismiss = { editingSlot = null },
+            onConfirm = { subject, date, start, end ->
+                onUpdateAvailability(editingSlot!!.id, subject, date, start, end)
+                editingSlot = null
+            }
+        )
+    }
+
     MainList {
         SectionCard("Admin Panel") {
             Text(state.currentUser?.displayName.orEmpty())
@@ -422,6 +463,19 @@ fun AdminShellScreen(
             }
         }
         MessageBlock(state.errorMessage, state.infoMessage)
+
+        Text("All Tutoring Slots", fontWeight = FontWeight.Bold)
+        if (state.dashboardState.availableTutorSlots.isEmpty()) Text("No slots found.", color = TextSecondary)
+        state.dashboardState.availableTutorSlots.forEach { slot ->
+            AvailabilityCard(
+                slot = slot,
+                onBook = null,
+                onDelete = onDeleteAvailability,
+                onEdit = { editingSlot = it },
+                isAdmin = true
+            )
+        }
+
         SectionCard("Add user") {
             OutlinedTextField(state.createUserForm.login, onCreateLoginChanged, label = { Text("Login") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(state.createUserForm.password, onCreatePasswordChanged, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
@@ -431,12 +485,14 @@ fun AdminShellScreen(
             RoleCheck("Tutor", state.createUserForm.tutor, onCreateTutorChecked)
             Button(onClick = { onClearMessages(); onCreateUserClick() }) { Text("Create user") }
         }
+
         Text("Users", fontWeight = FontWeight.Bold)
         if (state.adminUsers.isEmpty()) Text("No users.", color = TextSecondary)
         state.adminUsers.forEach { user ->
             val inspector = state.adminInspectors[user.uid]
-            AdminUserCard(user, inspector, onUpdateUserRoles, onToggleInspector)
+            AdminUserCard(user, inspector, onUpdateUserRoles, onToggleInspector, onDeleteUser)
         }
+
         Text("Reports", fontWeight = FontWeight.Bold)
         if (state.dashboardState.adminReports.isEmpty()) Text("No reports.", color = TextSecondary)
         state.dashboardState.adminReports.forEach { ReportCard(it) }
@@ -463,7 +519,13 @@ fun AdminShellScreen(
 }
 
 @Composable
-private fun AdminUserCard(user: AppUser, inspector: AdminUserInspectorUi?, onUpdateUserRoles: (String, Boolean, Boolean) -> Unit, onToggleInspector: (String) -> Unit) {
+private fun AdminUserCard(
+    user: AppUser,
+    inspector: AdminUserInspectorUi?,
+    onUpdateUserRoles: (String, Boolean, Boolean) -> Unit,
+    onToggleInspector: (String) -> Unit,
+    onDeleteUser: (String) -> Unit
+) {
     var student by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.STUDENT)) }
     var tutor by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.TUTOR)) }
     SectionCard(user.displayName) {
@@ -476,7 +538,18 @@ private fun AdminUserCard(user: AppUser, inspector: AdminUserInspectorUi?, onUpd
                 Button(onClick = { onUpdateUserRoles(user.uid, student, tutor) }) { Text("Save") }
             }
         }
-        OutlinedButton(onClick = { onToggleInspector(user.uid) }) { Text(if (inspector == null) "Inspect user" else "Hide details") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { onToggleInspector(user.uid) }) { Text(if (inspector == null) "Inspect" else "Hide") }
+            if (!user.hasRole(UserRole.ADMIN)) {
+                Button(
+                    onClick = { onDeleteUser(user.uid) },
+                    colors = ButtonDefaults.buttonColors(containerColor = PwrRed)
+                ) {
+                    Icon(Icons.Rounded.Delete, null)
+                    Text("Delete User")
+                }
+            }
+        }
         if (inspector != null) {
             if (inspector.isLoading) {
                 Text("Loading...")
@@ -530,17 +603,29 @@ private fun AdminUserCard(user: AppUser, inspector: AdminUserInspectorUi?, onUpd
 @Composable private fun AvailabilityCard(
     slot: TutorAvailabilityUi,
     onBook: ((String) -> Unit)?,
-    onDelete: ((String) -> Unit)? = null
+    onDelete: ((String) -> Unit)? = null,
+    onEdit: ((TutorAvailabilityUi) -> Unit)? = null,
+    isAdmin: Boolean = false
 ) {
     SectionCard(slot.subject) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Tutor: ${slot.tutorDisplayName}")
                 Text("${slot.dateLabel} | ${slot.timeLabel}")
+                if (slot.isBooked) {
+                    Text("STATUS: BOOKED", color = PwrRed, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                }
             }
-            if (onDelete != null && !slot.isBooked) {
-                OutlinedButton(onClick = { onDelete(slot.id) }) {
-                    Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = PwrRed)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onEdit != null && (isAdmin || !slot.isBooked)) {
+                    IconButton(onClick = { onEdit(slot) }) {
+                        Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = PwrNavy)
+                    }
+                }
+                if (onDelete != null && (isAdmin || !slot.isBooked)) {
+                    IconButton(onClick = { onDelete(slot.id) }) {
+                        Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = PwrRed)
+                    }
                 }
             }
             if (onBook != null) {
@@ -630,4 +715,145 @@ fun TimePickerDialogWrapper(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditSlotDialog(
+    slot: TutorAvailabilityUi,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String, String) -> Unit
+) {
+    var subject by remember { mutableStateOf(slot.subject) }
+    var date by remember { mutableStateOf(slot.dateLabel) }
+    var startHour by remember { mutableStateOf(slot.startHour) }
+    var endHour by remember { mutableStateOf(slot.endHour) }
+
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
+
+    val datePickerState = rememberDatePickerState()
+
+    val startParts = startHour.split(":")
+    val initialStartHour = startParts.getOrNull(0)?.toIntOrNull() ?: 12
+    val initialStartMinute = startParts.getOrNull(1)?.toIntOrNull() ?: 0
+    val startTimeState = rememberTimePickerState(initialHour = initialStartHour, initialMinute = initialStartMinute)
+
+    val endParts = endHour.split(":")
+    val initialEndHour = endParts.getOrNull(0)?.toIntOrNull() ?: 13
+    val initialEndMinute = endParts.getOrNull(1)?.toIntOrNull() ?: 0
+    val endTimeState = rememberTimePickerState(initialHour = initialEndHour, initialMinute = initialEndMinute)
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        date = formatter.format(Date(millis))
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            }
+        ) { DatePicker(state = datePickerState) }
+    }
+
+    if (showStartTimePicker) {
+        TimePickerDialogWrapper(
+            title = "Select start time",
+            onDismissRequest = { showStartTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    startHour = String.format("%02d:%02d", startTimeState.hour, startTimeState.minute)
+                    showStartTimePicker = false
+                }) { Text("OK") }
+            }
+        ) { TimePicker(state = startTimeState) }
+    }
+
+    if (showEndTimePicker) {
+        TimePickerDialogWrapper(
+            title = "Select end time",
+            onDismissRequest = { showEndTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    endHour = String.format("%02d:%02d", endTimeState.hour, endTimeState.minute)
+                    showEndTimePicker = false
+                }) { Text("OK") }
+            }
+        ) { TimePicker(state = endTimeState) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Availability") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = subject,
+                    onValueChange = { subject = it },
+                    label = { Text("Subject") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Box(modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }) {
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = false,
+                        label = { Text("Date") },
+                        trailingIcon = { Icon(Icons.Rounded.CalendarMonth, null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline
+                        )
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.weight(1f).clickable { showStartTimePicker = true }) {
+                        OutlinedTextField(
+                            value = startHour,
+                            onValueChange = {},
+                            readOnly = true,
+                            enabled = false,
+                            label = { Text("Start") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline
+                            )
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f).clickable { showEndTimePicker = true }) {
+                        OutlinedTextField(
+                            value = endHour,
+                            onValueChange = {},
+                            readOnly = true,
+                            enabled = false,
+                            label = { Text("End") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(subject, date, startHour, endHour) },
+                enabled = subject.isNotBlank() && date.isNotBlank()
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }

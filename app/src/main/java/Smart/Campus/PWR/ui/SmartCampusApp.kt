@@ -99,6 +99,7 @@ fun SmartCampusApp(viewModel: SmartCampusViewModel = viewModel()) {
                     onSubmitReport = viewModel::submitReport,
                     onClearMessages = viewModel::clearMessages,
                     onDeleteAvailability = viewModel::deleteAvailabilitySlot,
+                    onUpdateAvailability = viewModel::updateAvailabilitySlot,
                     onCancelBooking = viewModel::cancelLessonBooking
                 )
             } else {
@@ -119,6 +120,9 @@ fun SmartCampusApp(viewModel: SmartCampusViewModel = viewModel()) {
             onCreateUserClick = viewModel::createUserByAdmin,
             onUpdateUserRoles = viewModel::updateUserRolesByAdmin,
             onToggleInspector = viewModel::toggleAdminInspector,
+            onDeleteUser = viewModel::deleteUserByAdmin,
+            onDeleteAvailability = viewModel::deleteAvailabilitySlot,
+            onUpdateAvailability = viewModel::updateAvailabilitySlot,
             onClearMessages = viewModel::clearMessages
         )
     }

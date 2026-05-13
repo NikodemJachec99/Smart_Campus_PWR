@@ -116,9 +116,86 @@ class TutoringRepository(
         firestore.collection("tutor_availability").add(payload).await()
     }
 
-    suspend fun deleteAvailability(slotId: String) {
+    suspend fun deleteAvailability(slotId: String, user: AppUser) {
         require(slotId.isNotEmpty()) { "Slot ID cannot be empty." }
-        firestore.collection("tutor_availability").document(slotId).delete().await()
+
+        val docRef = firestore.collection("tutor_availability").document(slotId)
+        val snapshot = docRef.get().await()
+
+        if (snapshot.exists()) {
+            val ownerId = snapshot.getString("tutorId")
+            val isAdmin = user.hasRole(UserRole.ADMIN)
+
+            if (!isAdmin && ownerId != user.uid) {
+                throw IllegalStateException("Permission denied.")
+            }
+            if (!isAdmin && snapshot.getBoolean("isBooked") == true) {
+                throw IllegalStateException("Tutors cannot delete a booked slot.")
+            }
+
+            docRef.delete().await()
+        }
+    }
+
+    suspend fun updateAvailability(
+        slotId: String,
+        newSubject: String,
+        newDate: String,
+        newStartHour: String,
+        newEndHour: String,
+        user: AppUser
+    ) {
+        val normalizedSubject = newSubject.trim()
+        val normalizedDate = newDate.trim()
+        val normalizedStart = newStartHour.trim()
+        val normalizedEnd = newEndHour.trim()
+
+        require(normalizedSubject.isNotEmpty()) { "Subject is required." }
+        require(normalizedDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { "Date must use YYYY-MM-DD format." }
+        require(normalizedStart.isNotEmpty() && normalizedEnd.isNotEmpty()) { "Start and end hours are required." }
+
+        val docRef = firestore.collection("tutor_availability").document(slotId)
+
+        firestore.runTransaction { transaction ->
+            val snapshot = transaction.get(docRef)
+            if (!snapshot.exists()) {
+                throw IllegalStateException("Slot not found.")
+            }
+
+            val ownerId = snapshot.getString("tutorId")
+            val isAdmin = user.hasRole(UserRole.ADMIN)
+
+            if (!isAdmin && ownerId != user.uid) {
+                throw IllegalStateException("Permission denied.")
+            }
+
+            if (!isAdmin && snapshot.getBoolean("isBooked") == true) {
+                throw IllegalStateException("Tutors cannot edit a booked slot.")
+            }
+
+            transaction.update(
+                docRef,
+                mapOf(
+                    "subject" to normalizedSubject,
+                    "date" to normalizedDate,
+                    "startHour" to normalizedStart,
+                    "endHour" to normalizedEnd
+                )
+            )
+        }.await()
+    }
+
+    suspend fun getAllAvailability(): List<TutorAvailabilityUi> {
+        return try {
+            firestore.collection("tutor_availability")
+                .get()
+                .await()
+                .documents
+                .mapNotNull(::toAvailability)
+                .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     suspend fun bookAvailability(slotId: String, student: AppUser) {

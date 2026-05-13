@@ -231,6 +231,10 @@ class FirebaseAuthRepository(
         }
     }
 
+    suspend fun adminDeleteUser(uid: String) {
+        firestore.collection("users").document(uid).delete().await()
+    }
+
     suspend fun getUserByUid(uid: String): AppUser? {
         val snapshot = firestore.collection("users").document(uid).get().await()
         if (!snapshot.exists()) {
@@ -270,7 +274,7 @@ class FirebaseAuthRepository(
     private fun shouldUseClientFallback(error: Throwable): Boolean {
         if (error is FirebaseFunctionsException) {
             return error.code == FirebaseFunctionsException.Code.NOT_FOUND ||
-                error.code == FirebaseFunctionsException.Code.UNAVAILABLE
+                    error.code == FirebaseFunctionsException.Code.UNAVAILABLE
         }
 
         val message = error.message?.uppercase().orEmpty()
