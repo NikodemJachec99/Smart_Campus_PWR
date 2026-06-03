@@ -1,14 +1,64 @@
 const { admin, initializeAdminApp } = require("./firebaseAdminInit");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 
 initializeAdminApp();
 
 const db = admin.firestore();
 const auth = admin.auth();
+const messaging = admin.messaging();
 
 const LOGIN_DOMAIN = "smartcampus.local";
 const ADMIN_REGION = "europe-west1";
+
+async function sendPushToUser(uid, title, body, data) {
+  const userSnap = await db.collection("users").doc(uid).get();
+  const tokens =
+    userSnap.exists && Array.isArray(userSnap.data().fcmTokens) ? userSnap.data().fcmTokens : [];
+  if (tokens.length === 0) {
+    return;
+  }
+  const stringData = {};
+  Object.entries(data || {}).forEach(([key, value]) => {
+    stringData[key] = String(value);
+  });
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title, body },
+    data: { title, body, ...stringData },
+  });
+  const dead = [];
+  response.responses.forEach((result, index) => {
+    if (
+      !result.success &&
+      (result.error?.code === "messaging/registration-token-not-registered" ||
+        result.error?.code === "messaging/invalid-registration-token")
+    ) {
+      dead.push(tokens[index]);
+    }
+  });
+  if (dead.length > 0) {
+    await db
+      .collection("users")
+      .doc(uid)
+      .update({ fcmTokens: admin.firestore.FieldValue.arrayRemove(...dead) });
+  }
+}
+
+async function notifyUser(uid, type, title, body, data) {
+  await db.collection("notifications").add({
+    recipientUid: uid,
+    type,
+    title,
+    body,
+    data: data || {},
+    read: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await sendPushToUser(uid, title, body, { type, ...(data || {}) });
+}
 
 function ensureAdminCaller(request) {
   if (!request.auth || request.auth.token.admin !== true) {
@@ -90,6 +140,35 @@ function parseRolesFromUserDoc(data) {
   }
 
   return result;
+}
+
+async function callerHasRole(request, role) {
+  if (!request.auth) {
+    return false;
+  }
+
+  if (request.auth.token?.[role] === true) {
+    return true;
+  }
+  if (role === "tutor" && request.auth.token?.lecturer === true) {
+    return true;
+  }
+
+  const userDoc = await db.collection("users").doc(request.auth.uid).get();
+  if (!userDoc.exists) {
+    return false;
+  }
+
+  const roles = parseRolesFromUserDoc(userDoc.data());
+  return roles.has(role) || (role === "tutor" && roles.has("lecturer"));
+}
+
+function requireStringId(value, label) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) {
+    throw new HttpsError("invalid-argument", `${label} is required.`);
+  }
+  return normalized;
 }
 
 function mapAuthError(error) {
@@ -270,3 +349,223 @@ exports.adminUpdateUserRoles = onCall({ region: ADMIN_REGION }, async (request) 
     roles,
   };
 });
+
+exports.adminDeleteUser = onCall({ region: ADMIN_REGION }, async (request) => {
+  ensureAdminCaller(request);
+
+  const uid = requireStringId(request.data?.uid, "UID");
+  if (uid === request.auth.uid) {
+    throw new HttpsError("failed-precondition", "Admins cannot delete their own account.");
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const userDoc = await userRef.get();
+  const existingRoles = parseRolesFromUserDoc(userDoc.exists ? userDoc.data() : {});
+
+  let userRecord = null;
+  try {
+    userRecord = await auth.getUser(uid);
+  } catch (error) {
+    if (error?.code !== "auth/user-not-found") {
+      throw mapAuthError(error);
+    }
+  }
+
+  if (existingRoles.has("admin") || userRecord?.customClaims?.admin === true) {
+    throw new HttpsError("failed-precondition", "Admin users cannot be deleted from this panel.");
+  }
+
+  if (userRecord) {
+    await auth.deleteUser(uid);
+  }
+  await userRef.delete();
+
+  return { uid, deleted: true };
+});
+
+exports.deleteAssignment = onCall({ region: ADMIN_REGION }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in before deleting an assignment.");
+  }
+
+  const assignmentId = requireStringId(request.data?.assignmentId, "Assignment ID");
+  const assignmentRef = db.collection("assignments").doc(assignmentId);
+  const assignmentDoc = await assignmentRef.get();
+  if (!assignmentDoc.exists) {
+    throw new HttpsError("not-found", "Assignment not found.");
+  }
+
+  const assignment = assignmentDoc.data() || {};
+  const isAdmin = await callerHasRole(request, "admin");
+  const isTutorOwner =
+    (await callerHasRole(request, "tutor")) && assignment.tutorUid === request.auth.uid;
+
+  if (!isAdmin && !isTutorOwner) {
+    throw new HttpsError("permission-denied", "Only the owning tutor or admin can delete this assignment.");
+  }
+
+  const submissionsSnapshot = await assignmentRef.collection("submissions").get();
+  const bucket = admin.storage().bucket();
+  let batch = db.batch();
+  let batchWrites = 0;
+
+  async function queueDelete(ref) {
+    batch.delete(ref);
+    batchWrites += 1;
+    if (batchWrites >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      batchWrites = 0;
+    }
+  }
+
+  for (const submissionDoc of submissionsSnapshot.docs) {
+    const storagePath = submissionDoc.get("storagePath");
+    if (typeof storagePath === "string" && storagePath.trim()) {
+      try {
+        await bucket.file(storagePath).delete({ ignoreNotFound: true });
+      } catch (error) {
+        logger.warn("Failed to delete submission file", { assignmentId, storagePath, error });
+      }
+    }
+    await queueDelete(submissionDoc.ref);
+  }
+
+  await queueDelete(assignmentRef);
+  if (batchWrites > 0) {
+    await batch.commit();
+  }
+
+  return {
+    assignmentId,
+    deleted: true,
+    submissionsDeleted: submissionsSnapshot.size,
+  };
+});
+
+exports.onCourseMessageCreated = onDocumentCreated(
+  { region: ADMIN_REGION, document: "courses/{courseId}/messages/{messageId}" },
+  async (event) => {
+    const message = event.data?.data();
+    if (!message) {
+      return;
+    }
+    const courseId = event.params.courseId;
+    const courseSnap = await db.collection("courses").doc(courseId).get();
+    const course = courseSnap.data() || {};
+    const membersSnap = await db.collection("courses").doc(courseId).collection("members").get();
+    const recipients = new Set(membersSnap.docs.map((doc) => doc.id));
+    if (course.tutorUid) {
+      recipients.add(course.tutorUid);
+    }
+    recipients.delete(message.senderUid);
+
+    const isAnnouncement = message.isAnnouncement === true;
+    const title = isAnnouncement
+      ? `Announcement: ${course.name || "Course"}`
+      : `${course.name || "Course"}: ${message.senderName}`;
+    const body = message.text || "";
+
+    await Promise.all(
+      [...recipients].map((uid) =>
+        notifyUser(uid, isAnnouncement ? "announcement" : "chat", title, body, { courseId })
+      )
+    );
+  }
+);
+
+exports.onDirectMessageCreated = onDocumentCreated(
+  { region: ADMIN_REGION, document: "conversations/{conversationId}/messages/{messageId}" },
+  async (event) => {
+    const message = event.data?.data();
+    if (!message) {
+      return;
+    }
+    const conversationId = event.params.conversationId;
+    const conversationRef = db.collection("conversations").doc(conversationId);
+    const conversation = (await conversationRef.get()).data() || {};
+
+    await conversationRef.update({
+      lastMessageText: message.text || "",
+      lastMessageSenderName: message.senderName || "",
+      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const participants = Array.isArray(conversation.participants) ? conversation.participants : [];
+    await Promise.all(
+      participants
+        .filter((uid) => uid !== message.senderUid)
+        .map((uid) =>
+          notifyUser(uid, "chat", `Message from ${message.senderName}`, message.text || "", {
+            conversationId,
+          })
+        )
+    );
+  }
+);
+
+exports.onAssignmentCreated = onDocumentCreated(
+  { region: ADMIN_REGION, document: "assignments/{assignmentId}" },
+  async (event) => {
+    const assignment = event.data?.data();
+    if (!assignment || !assignment.courseId) {
+      return;
+    }
+    const membersSnap = await db
+      .collection("courses")
+      .doc(assignment.courseId)
+      .collection("members")
+      .get();
+    const title = `New assignment: ${assignment.title || ""}`;
+    const body = assignment.courseName
+      ? `${assignment.courseName} — due ${assignment.dueDate || "soon"}`
+      : assignment.dueDate || "";
+
+    await Promise.all(
+      membersSnap.docs.map((doc) =>
+        notifyUser(doc.id, "assignment", title, body, {
+          assignmentId: event.params.assignmentId,
+          courseId: assignment.courseId,
+        })
+      )
+    );
+  }
+);
+
+exports.dailyDeadlineReminder = onSchedule(
+  { region: ADMIN_REGION, schedule: "0 8 * * *", timeZone: "Europe/Warsaw" },
+  async () => {
+    const now = admin.firestore.Timestamp.now();
+    const in24h = admin.firestore.Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60 * 1000);
+    const dueSnap = await db
+      .collection("assignments")
+      .where("dueAt", ">", now)
+      .where("dueAt", "<=", in24h)
+      .get();
+
+    for (const assignmentDoc of dueSnap.docs) {
+      const assignment = assignmentDoc.data();
+      if (!assignment.courseId) {
+        continue;
+      }
+      const [membersSnap, submissionsSnap] = await Promise.all([
+        db.collection("courses").doc(assignment.courseId).collection("members").get(),
+        assignmentDoc.ref.collection("submissions").get(),
+      ]);
+      const submitted = new Set(submissionsSnap.docs.map((doc) => doc.id));
+      await Promise.all(
+        membersSnap.docs
+          .filter((member) => !submitted.has(member.id))
+          .map((member) =>
+            notifyUser(
+              member.id,
+              "deadline",
+              `Deadline soon: ${assignment.title || ""}`,
+              `${assignment.courseName || "Course"} — due ${assignment.dueDate || ""}`,
+              { assignmentId: assignmentDoc.id, courseId: assignment.courseId }
+            )
+          )
+      );
+    }
+  }
+);

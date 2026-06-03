@@ -19,21 +19,21 @@ class SessionRouterTest {
     }
 
     @Test
-    fun resolve_returnsRolePickerForDualRole() {
+    fun resolve_returnsMainShellForDualRole() {
         val user = AppUser(
             uid = "2",
             login = "dual",
             email = "dual@smartcampus.local",
             displayName = "Dual",
-            roles = setOf(UserRole.STUDENT, UserRole.LECTURER),
+            roles = setOf(UserRole.STUDENT, UserRole.TUTOR),
             isActive = true
         )
 
-        assertEquals(SessionDestination.ROLE_PICKER, SessionRouter.resolve(user))
+        assertEquals(SessionDestination.MAIN_SHELL, SessionRouter.resolve(user))
     }
 
     @Test
-    fun resolve_returnsSingleRoleHome() {
+    fun resolve_returnsMainShellForStudentOrTutor() {
         val student = AppUser(
             uid = "3",
             login = "student",
@@ -43,16 +43,16 @@ class SessionRouterTest {
             isActive = true
         )
 
-        val lecturer = AppUser(
+        val tutor = AppUser(
             uid = "4",
-            login = "lecturer",
-            email = "lecturer@smartcampus.local",
-            displayName = "Lecturer",
-            roles = setOf(UserRole.LECTURER),
+            login = "tutor",
+            email = "tutor@smartcampus.local",
+            displayName = "Tutor",
+            roles = setOf(UserRole.TUTOR),
             isActive = true
         )
 
-        assertEquals(SessionDestination.ROLE_HOME_STUDENT, SessionRouter.resolve(student))
-        assertEquals(SessionDestination.ROLE_HOME_LECTURER, SessionRouter.resolve(lecturer))
+        assertEquals(SessionDestination.MAIN_SHELL, SessionRouter.resolve(student))
+        assertEquals(SessionDestination.MAIN_SHELL, SessionRouter.resolve(tutor))
     }
 }

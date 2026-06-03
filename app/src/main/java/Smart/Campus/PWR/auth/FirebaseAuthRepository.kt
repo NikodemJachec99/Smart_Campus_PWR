@@ -1,7 +1,6 @@
 package Smart.Campus.PWR.auth
 
 import android.util.Log
-import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
@@ -10,17 +9,11 @@ import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
-import com.google.firebase.firestore.SetOptions
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 class FirebaseAuthRepository(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
@@ -29,7 +22,6 @@ class FirebaseAuthRepository(
     companion object {
         private const val TAG = "FirebaseAuthRepository"
         private const val AUTH_TIMEOUT_MS = 15_000L
-        private const val LOGIN_DOMAIN = "smartcampus.local"
     }
 
     private var preferredFunctionsRegion: String = "europe-west1"
@@ -168,71 +160,49 @@ class FirebaseAuthRepository(
     ): AppUser {
         val normalizedLogin = AuthMapping.normalizeLogin(login)
 
-        return try {
-            val data = callAdminFunction(
-                functionName = "adminCreateUser",
-                payload = mapOf(
-                    "login" to normalizedLogin,
-                    "password" to password,
-                    "displayName" to displayName,
-                    "roles" to mapOf(
-                        "admin" to admin,
-                        "student" to student,
-                        "tutor" to tutor
-                    )
+        val data = callAdminFunction(
+            functionName = "adminCreateUser",
+            payload = mapOf(
+                "login" to normalizedLogin,
+                "password" to password,
+                "displayName" to displayName,
+                "roles" to mapOf(
+                    "admin" to admin,
+                    "student" to student,
+                    "tutor" to tutor
                 )
-            ) as? Map<*, *> ?: throw IllegalStateException("Invalid backend response.")
-
-            val uid = data["uid"] as? String
-                ?: throw IllegalStateException("Missing uid in backend response.")
-
-            requireNotNull(getUserByUid(uid)) {
-                "User created but profile document is missing."
-            }
-        } catch (error: Throwable) {
-            if (!shouldUseClientFallback(error)) {
-                throw error
-            }
-
-            Log.w(TAG, "Functions unavailable, using client fallback for adminCreateUser", error)
-            createUserViaIdentityToolkitAndFirestore(
-                normalizedLogin = normalizedLogin,
-                password = password,
-                displayName = displayName,
-                admin = admin,
-                student = student,
-                tutor = tutor
             )
+        ) as? Map<*, *> ?: throw IllegalStateException("Invalid backend response.")
+
+        val uid = data["uid"] as? String
+            ?: throw IllegalStateException("Missing uid in backend response.")
+
+        return requireNotNull(getUserByUid(uid)) {
+            "User created but profile document is missing."
         }
     }
 
     suspend fun adminUpdateUserRoles(uid: String, student: Boolean, tutor: Boolean): Set<UserRole> {
-        return try {
-            val data = callAdminFunction(
-                functionName = "adminUpdateUserRoles",
-                payload = mapOf(
-                    "uid" to uid,
-                    "roles" to mapOf(
-                        "student" to student,
-                        "tutor" to tutor
-                    )
+        val data = callAdminFunction(
+            functionName = "adminUpdateUserRoles",
+            payload = mapOf(
+                "uid" to uid,
+                "roles" to mapOf(
+                    "student" to student,
+                    "tutor" to tutor
                 )
-            ) as? Map<*, *> ?: throw IllegalStateException("Invalid backend response.")
+            )
+        ) as? Map<*, *> ?: throw IllegalStateException("Invalid backend response.")
 
-            val rolesRaw = data["roles"]
-            AuthMapping.parseRoles(rolesRaw, null)
-        } catch (error: Throwable) {
-            if (!shouldUseClientFallback(error)) {
-                throw error
-            }
-
-            Log.w(TAG, "Functions unavailable, using client fallback for adminUpdateUserRoles", error)
-            updateUserRolesViaFirestore(uid, student, tutor)
-        }
+        val rolesRaw = data["roles"]
+        return AuthMapping.parseRoles(rolesRaw, null)
     }
 
     suspend fun adminDeleteUser(uid: String) {
-        firestore.collection("users").document(uid).delete().await()
+        callAdminFunction(
+            functionName = "adminDeleteUser",
+            payload = mapOf("uid" to uid)
+        )
     }
 
     suspend fun getUserByUid(uid: String): AppUser? {
@@ -260,7 +230,7 @@ class FirebaseAuthRepository(
                 else -> "Firebase auth error: ${error.errorCode}"
             }
             is FirebaseFunctionsException -> when (error.code) {
-                FirebaseFunctionsException.Code.NOT_FOUND -> "Backend function not found. Admin fallback is active."
+                FirebaseFunctionsException.Code.NOT_FOUND -> "Backend function not found. Deploy Cloud Functions and try again."
                 FirebaseFunctionsException.Code.PERMISSION_DENIED -> "No admin permission for this operation."
                 FirebaseFunctionsException.Code.UNAUTHENTICATED -> "Session expired. Sign in again."
                 FirebaseFunctionsException.Code.UNAVAILABLE -> "Functions backend is temporarily unavailable."
@@ -268,156 +238,6 @@ class FirebaseAuthRepository(
             }
             is FirebaseFirestoreException -> "Firestore error: ${error.code.name}"
             else -> error.message ?: "Unexpected error occurred."
-        }
-    }
-
-    private fun shouldUseClientFallback(error: Throwable): Boolean {
-        if (error is FirebaseFunctionsException) {
-            return error.code == FirebaseFunctionsException.Code.NOT_FOUND ||
-                    error.code == FirebaseFunctionsException.Code.UNAVAILABLE
-        }
-
-        val message = error.message?.uppercase().orEmpty()
-        return message.contains("NOT_FOUND") || message.contains("UNAVAILABLE")
-    }
-
-    private suspend fun createUserViaIdentityToolkitAndFirestore(
-        normalizedLogin: String,
-        password: String,
-        displayName: String,
-        admin: Boolean,
-        student: Boolean,
-        tutor: Boolean
-    ): AppUser {
-        if (password.length < 6) {
-            throw IllegalArgumentException("Password must be at least 6 characters.")
-        }
-
-        val roles = mutableListOf<String>()
-        if (admin) roles.add("admin")
-        if (student) roles.add("student")
-        if (tutor) roles.add("tutor")
-
-        if (roles.isEmpty()) {
-            throw IllegalArgumentException("Select at least one role.")
-        }
-
-        val email = "$normalizedLogin@$LOGIN_DOMAIN"
-        val uid = createEmailPasswordUserViaRest(email, password, displayName.ifBlank { normalizedLogin })
-
-        val creatorUid = auth.currentUser?.uid ?: "admin-panel"
-        val userDoc = mapOf(
-            "login" to normalizedLogin,
-            "loginLowercase" to normalizedLogin,
-            "email" to email,
-            "displayName" to displayName.ifBlank { normalizedLogin },
-            "roles" to roles,
-            "isActive" to true,
-            "createdBy" to creatorUid,
-            "createdAt" to FieldValue.serverTimestamp(),
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
-
-        firestore.collection("users").document(uid).set(userDoc, SetOptions.merge()).await()
-
-        return requireNotNull(getUserByUid(uid)) {
-            "User created, but Firestore profile is missing."
-        }
-    }
-
-    private suspend fun updateUserRolesViaFirestore(uid: String, student: Boolean, tutor: Boolean): Set<UserRole> {
-        if (!student && !tutor) {
-            throw IllegalArgumentException("User must have at least one non-admin role.")
-        }
-
-        val userRef = firestore.collection("users").document(uid)
-        val snapshot = userRef.get().await()
-        if (!snapshot.exists()) {
-            throw IllegalStateException("User profile does not exist in Firestore.")
-        }
-
-        val existingRoles = AuthMapping.parseRoles(snapshot.get("roles"), snapshot.getString("role"))
-        if (existingRoles.contains(UserRole.ADMIN)) {
-            throw IllegalStateException("Admin role cannot be changed from this panel.")
-        }
-
-        val roles = buildList {
-            if (student) add("student")
-            if (tutor) add("tutor")
-        }
-
-        userRef.set(
-            mapOf(
-                "roles" to roles,
-                "updatedAt" to FieldValue.serverTimestamp()
-            ),
-            SetOptions.merge()
-        ).await()
-
-        return AuthMapping.parseRoles(roles, null)
-    }
-
-    private suspend fun createEmailPasswordUserViaRest(email: String, password: String, displayName: String): String {
-        val apiKey = FirebaseApp.getInstance().options.apiKey
-            ?: throw IllegalStateException("Missing Firebase API key in app configuration.")
-
-        val endpoint = "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$apiKey"
-        val body = JSONObject()
-            .put("email", email)
-            .put("password", password)
-            .put("displayName", displayName)
-            .put("returnSecureToken", true)
-            .toString()
-
-        return withContext(Dispatchers.IO) {
-            val connection = URL(endpoint).openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.connectTimeout = AUTH_TIMEOUT_MS.toInt()
-            connection.readTimeout = AUTH_TIMEOUT_MS.toInt()
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json")
-
-            connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write(body)
-            }
-
-            val status = connection.responseCode
-            val responseBody = try {
-                if (status in 200..299) {
-                    connection.inputStream.bufferedReader().use { it.readText() }
-                } else {
-                    connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                }
-            } finally {
-                connection.disconnect()
-            }
-
-            if (status !in 200..299) {
-                throw IllegalStateException(mapIdentityToolkitError(responseBody))
-            }
-
-            val json = JSONObject(responseBody)
-            val uid = json.optString("localId")
-            if (uid.isBlank()) {
-                throw IllegalStateException("Identity Toolkit response missing localId.")
-            }
-
-            uid
-        }
-    }
-
-    private fun mapIdentityToolkitError(rawResponse: String): String {
-        return try {
-            val root = JSONObject(rawResponse)
-            val message = root.optJSONObject("error")?.optString("message") ?: "UNKNOWN"
-            when (message) {
-                "EMAIL_EXISTS" -> "User with this login/email already exists."
-                "INVALID_PASSWORD" -> "Password is invalid."
-                "WEAK_PASSWORD : Password should be at least 6 characters" -> "Password must be at least 6 characters."
-                else -> "User creation error: $message"
-            }
-        } catch (_: Exception) {
-            "User creation error."
         }
     }
 

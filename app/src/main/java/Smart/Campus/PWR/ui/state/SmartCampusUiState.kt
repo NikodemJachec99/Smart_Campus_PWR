@@ -4,6 +4,7 @@ import Smart.Campus.PWR.auth.AppUser
 import Smart.Campus.PWR.auth.UserRole
 
 enum class AppScreen {
+    ONBOARDING,
     LOGIN,
     REGISTER,
     MAIN_SHELL,
@@ -36,6 +37,7 @@ data class AvailabilityFormState(
 
 data class ReviewFormState(
     val tutorUid: String = "",
+    val bookingId: String = "",
     val rating: String = "5",
     val comment: String = ""
 )
@@ -61,7 +63,7 @@ data class AdminUserInspectorUi(
 data class SmartCampusUiState(
     val isBootstrapping: Boolean = true,
     val isBusy: Boolean = false,
-    val screen: AppScreen = AppScreen.LOGIN,
+    val screen: AppScreen = AppScreen.ONBOARDING,
     val currentUser: AppUser? = null,
     val activeRole: UserRole? = null,
     val loginInput: String = "",
@@ -78,5 +80,8 @@ data class SmartCampusUiState(
     val availabilityForm: AvailabilityFormState = AvailabilityFormState(),
     val reviewForm: ReviewFormState = ReviewFormState(),
     val reportForm: ReportFormState = ReportFormState(),
+    val assignmentForm: AssignmentFormState = AssignmentFormState(),
+    val courseForm: CourseFormState = CourseFormState(),
+    val chat: ChatUiState = ChatUiState(),
     val dashboardState: DashboardUiState = DashboardUiState()
 )

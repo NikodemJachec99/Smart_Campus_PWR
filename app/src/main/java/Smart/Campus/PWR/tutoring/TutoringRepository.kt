@@ -14,10 +14,15 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.tasks.await
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Date
 import java.util.Locale
 
 class TutoringRepository(
@@ -101,6 +106,8 @@ class TutoringRepository(
         require(normalizedSubject.isNotEmpty()) { "Subject is required." }
         require(normalizedDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { "Date must use YYYY-MM-DD format." }
         require(normalizedStart.isNotEmpty() && normalizedEnd.isNotEmpty()) { "Start and end hours are required." }
+        val (startAt, endAt) = parseRequiredLessonWindow(normalizedDate, normalizedStart, normalizedEnd)
+        requireFutureWindow(startAt)
 
         val payload = mapOf(
             "tutorId" to tutor.uid,
@@ -109,6 +116,8 @@ class TutoringRepository(
             "date" to normalizedDate,
             "startHour" to normalizedStart,
             "endHour" to normalizedEnd,
+            "startAt" to startAt.toFirebaseTimestamp(),
+            "endAt" to endAt.toFirebaseTimestamp(),
             "isBooked" to false,
             "createdAt" to FieldValue.serverTimestamp()
         )
@@ -153,6 +162,8 @@ class TutoringRepository(
         require(normalizedSubject.isNotEmpty()) { "Subject is required." }
         require(normalizedDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { "Date must use YYYY-MM-DD format." }
         require(normalizedStart.isNotEmpty() && normalizedEnd.isNotEmpty()) { "Start and end hours are required." }
+        val (startAt, endAt) = parseRequiredLessonWindow(normalizedDate, normalizedStart, normalizedEnd)
+        requireFutureWindow(startAt)
 
         val docRef = firestore.collection("tutor_availability").document(slotId)
 
@@ -179,23 +190,22 @@ class TutoringRepository(
                     "subject" to normalizedSubject,
                     "date" to normalizedDate,
                     "startHour" to normalizedStart,
-                    "endHour" to normalizedEnd
+                    "endHour" to normalizedEnd,
+                    "startAt" to startAt.toFirebaseTimestamp(),
+                    "endAt" to endAt.toFirebaseTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
         }.await()
     }
 
     suspend fun getAllAvailability(): List<TutorAvailabilityUi> {
-        return try {
-            firestore.collection("tutor_availability")
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toAvailability)
-                .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("tutor_availability")
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toAvailability)
+            .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
     }
 
     suspend fun bookAvailability(slotId: String, student: AppUser) {
@@ -214,6 +224,9 @@ class TutoringRepository(
             }
 
             val tutorId = slotSnapshot.getString("tutorId").orEmpty()
+            if (tutorId == student.uid) {
+                throw IllegalStateException("You cannot book your own tutoring slot.")
+            }
             val tutorDisplayName = slotSnapshot.getString("tutorDisplayName").orEmpty()
             val subject = slotSnapshot.getString("subject").orEmpty()
             val date = slotSnapshot.getString("date").orEmpty()
@@ -221,48 +234,90 @@ class TutoringRepository(
 
             val startHour = slotSnapshot.get("startHour")?.toString().orEmpty()
             val endHour = slotSnapshot.get("endHour")?.toString().orEmpty()
+            val (lessonStartsAt, lessonEndsAt) = parseRequiredLessonWindow(date, startHour, endHour)
+            requireFutureWindow(lessonStartsAt)
 
             transaction.update(
                 slotRef,
                 mapOf(
                     "isBooked" to true,
+                    "bookingId" to bookingRef.id,
                     "bookedBy" to student.uid,
-                    "bookedAt" to FieldValue.serverTimestamp()
+                    "bookedAt" to FieldValue.serverTimestamp(),
+                    "startAt" to lessonStartsAt.toFirebaseTimestamp(),
+                    "endAt" to lessonEndsAt.toFirebaseTimestamp()
                 )
             )
 
-            transaction.set(
-                bookingRef,
-                mapOf(
-                    "availabilityId" to slotId,
-                    "tutorId" to tutorId,
-                    "tutorDisplayName" to tutorDisplayName,
-                    "studentId" to student.uid,
-                    "studentDisplayName" to student.displayName,
-                    "subject" to subject,
-                    "date" to date,
-                    "startHour" to startHour,
-                    "endHour" to endHour,
-                    "status" to "booked",
-                    "createdAt" to FieldValue.serverTimestamp()
-                )
+            val bookingPayload = mutableMapOf<String, Any>(
+                "availabilityId" to slotId,
+                "tutorId" to tutorId,
+                "tutorDisplayName" to tutorDisplayName,
+                "studentId" to student.uid,
+                "studentDisplayName" to student.displayName,
+                "subject" to subject,
+                "date" to date,
+                "startHour" to startHour,
+                "endHour" to endHour,
+                "status" to "booked",
+                "lessonStartsAt" to lessonStartsAt.toFirebaseTimestamp(),
+                "lessonEndsAt" to lessonEndsAt.toFirebaseTimestamp(),
+                "createdAt" to FieldValue.serverTimestamp()
             )
+            transaction.set(bookingRef, bookingPayload)
         }.await()
     }
 
-    suspend fun cancelBooking(bookingId: String, slotId: String) {
-        require(bookingId.isNotEmpty() && slotId.isNotEmpty()) { "IDs cannot be empty." }
+    suspend fun cancelBooking(bookingId: String, slotId: String, reason: String, user: AppUser) {
+        require(bookingId.isNotEmpty()) { "Booking ID cannot be empty." }
+        val normalizedReason = reason.trim()
+        require(normalizedReason.isNotEmpty()) { "Cancellation reason is required." }
+        require(normalizedReason.length <= 500) { "Cancellation reason is too long." }
 
         val bookingRef = firestore.collection("bookings").document(bookingId)
-        val slotRef = firestore.collection("tutor_availability").document(slotId)
 
         firestore.runTransaction { transaction ->
-            transaction.update(bookingRef, "status", "cancelled")
+            val bookingSnapshot = transaction.get(bookingRef)
+            if (!bookingSnapshot.exists()) {
+                throw IllegalStateException("Booking not found.")
+            }
+
+            val studentId = bookingSnapshot.getString("studentId").orEmpty()
+            val tutorId = bookingSnapshot.getString("tutorId").orEmpty()
+            val isParticipant = studentId == user.uid || tutorId == user.uid
+            if (!isParticipant && !user.hasRole(UserRole.ADMIN)) {
+                throw IllegalStateException("Permission denied.")
+            }
+
+            if (bookingSnapshot.getString("status") != "booked") {
+                throw IllegalStateException("Only booked lessons can be cancelled.")
+            }
+
+            val availabilityId = bookingSnapshot.getString("availabilityId").orEmpty().ifBlank { slotId }
+            if (availabilityId.isBlank()) {
+                throw IllegalStateException("Booking is missing its availability slot.")
+            }
+            val slotRef = firestore.collection("tutor_availability").document(availabilityId)
+            val slotSnapshot = transaction.get(slotRef)
+            if (!slotSnapshot.exists()) {
+                throw IllegalStateException("Availability slot not found.")
+            }
+
+            transaction.update(
+                bookingRef,
+                mapOf(
+                    "status" to "cancelled",
+                    "cancelReason" to normalizedReason,
+                    "cancelledBy" to user.uid,
+                    "cancelledAt" to FieldValue.serverTimestamp()
+                )
+            )
 
             transaction.update(
                 slotRef,
                 mapOf(
                     "isBooked" to false,
+                    "bookingId" to FieldValue.delete(),
                     "bookedBy" to FieldValue.delete(),
                     "bookedAt" to FieldValue.delete()
                 )
@@ -270,19 +325,34 @@ class TutoringRepository(
         }.await()
     }
 
-    suspend fun createReview(student: AppUser, tutorUid: String, rating: Int, comment: String) {
+    suspend fun createReview(
+        student: AppUser,
+        tutorUid: String,
+        bookingId: String,
+        rating: Int,
+        comment: String
+    ) {
         val normalizedComment = comment.trim()
         val normalizedTutorUid = tutorUid.trim()
+        val normalizedBookingId = bookingId.trim()
 
-        require(normalizedTutorUid.isNotEmpty()) { "Select tutor." }
         require(rating in 1..5) { "Rating must be between 1 and 5." }
         require(normalizedComment.isNotEmpty()) { "Review comment is required." }
 
-        val tutor = getUserByUid(normalizedTutorUid)
-            ?: throw IllegalStateException("Tutor account does not exist.")
+        val payload = if (normalizedBookingId.isNotEmpty()) {
+            buildLessonReviewPayload(
+                student = student,
+                bookingId = normalizedBookingId,
+                rating = rating,
+                comment = normalizedComment
+            )
+        } else {
+            require(normalizedTutorUid.isNotEmpty()) { "Select tutor." }
+            val tutor = getUserByUid(normalizedTutorUid)
+                ?: throw IllegalStateException("Tutor account does not exist.")
 
-        firestore.collection("reviews").add(
             mapOf(
+                "reviewType" to "general",
                 "tutorId" to tutor.uid,
                 "tutorDisplayName" to tutor.displayName,
                 "studentId" to student.uid,
@@ -291,7 +361,237 @@ class TutoringRepository(
                 "comment" to normalizedComment,
                 "createdAt" to FieldValue.serverTimestamp()
             )
-        ).await()
+        }
+
+        if (normalizedBookingId.isNotEmpty()) {
+            firestore.collection("reviews")
+                .document("lesson_${normalizedBookingId}_${student.uid}")
+                .set(payload)
+                .await()
+        } else {
+            firestore.collection("reviews").add(payload).await()
+        }
+    }
+
+    private suspend fun buildLessonReviewPayload(
+        student: AppUser,
+        bookingId: String,
+        rating: Int,
+        comment: String
+    ): Map<String, Any> {
+        val bookingSnapshot = firestore.collection("bookings").document(bookingId).get().await()
+        if (!bookingSnapshot.exists()) {
+            throw IllegalStateException("Lesson not found.")
+        }
+
+        val studentId = bookingSnapshot.getString("studentId").orEmpty()
+        if (studentId != student.uid) {
+            throw IllegalStateException("You can review only your own lessons.")
+        }
+
+        if (bookingSnapshot.getString("status") != "booked") {
+            throw IllegalStateException("Only booked lessons can be reviewed after they end.")
+        }
+
+        val lessonEnd = bookingSnapshot.getTimestamp("lessonEndsAt")
+            ?.toDate()
+            ?.toInstant()
+            ?.atZone(ZoneId.systemDefault())
+            ?.toLocalDateTime()
+            ?: throw IllegalStateException("Lesson end timestamp is missing.")
+        if (lessonEnd.isAfter(LocalDateTime.now())) {
+            throw IllegalStateException("You can review a lesson after it ends.")
+        }
+
+        val date = bookingSnapshot.getString("date").orEmpty()
+        val startHour = bookingSnapshot.get("startHour")?.toString().orEmpty()
+        val endHour = bookingSnapshot.get("endHour")?.toString().orEmpty()
+
+        val alreadyReviewed = firestore.collection("reviews")
+            .whereEqualTo("bookingId", bookingId)
+            .get()
+            .await()
+            .documents
+            .any { it.getString("studentId") == student.uid }
+
+        if (alreadyReviewed) {
+            throw IllegalStateException("This lesson has already been reviewed.")
+        }
+
+        val tutorId = bookingSnapshot.getString("tutorId").orEmpty()
+        val tutorDisplayName = bookingSnapshot.getString("tutorDisplayName").orEmpty().ifBlank { tutorId }
+        val subject = bookingSnapshot.getString("subject").orEmpty()
+
+        return mapOf(
+            "reviewType" to "lesson",
+            "bookingId" to bookingId,
+            "tutorId" to tutorId,
+            "tutorDisplayName" to tutorDisplayName,
+            "studentId" to student.uid,
+            "studentDisplayName" to student.displayName,
+            "rating" to rating,
+            "comment" to comment,
+            "subject" to subject,
+            "lessonDate" to date,
+            "lessonTime" to "$startHour - $endHour",
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+    }
+
+    fun listenDashboard(
+        user: AppUser,
+        onUpdate: (DashboardUiState) -> Unit,
+        onError: (Throwable) -> Unit
+    ): ListenerRegistration {
+        val registrations = mutableListOf<ListenerRegistration>()
+        var current = DashboardUiState(isLoading = false)
+
+        fun emit(next: DashboardUiState) {
+            current = next.copy(isLoading = false)
+            onUpdate(current)
+        }
+
+        if (user.hasRole(UserRole.STUDENT)) {
+            registrations += firestore.collection("bookings")
+                .whereEqualTo("studentId", user.uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        val bookings = snapshot?.documents.orEmpty()
+                            .mapNotNull(::toBooking)
+                            .sortedWith(compareBy<LessonBookingUi> { it.dateLabel }.thenBy { it.startHour })
+                        emit(current.copy(myStudentBookings = bookings))
+                    }
+                }
+
+            registrations += firestore.collection("tutor_availability")
+                .whereEqualTo("isBooked", false)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        val slots = snapshot?.documents.orEmpty()
+                            .mapNotNull(::toAvailability)
+                            .filter { it.tutorId != user.uid }
+                            .filter(::isFutureSlot)
+                            .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
+                        emit(current.copy(availableTutorSlots = slots))
+                    }
+                }
+
+            registrations += firestore.collection("reviews")
+                .whereEqualTo("studentId", user.uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        val reviews = snapshot?.documents.orEmpty()
+                            .mapNotNull(::toReview)
+                            .sortedByDescending { it.createdAtLabel }
+                        emit(current.copy(reviewsByMe = reviews))
+                    }
+                }
+
+            registrations += firestore.collection("reports")
+                .whereEqualTo("studentId", user.uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        val reports = snapshot?.documents.orEmpty()
+                            .mapNotNull(::toReport)
+                            .sortedByDescending { it.createdAtLabel }
+                        emit(current.copy(reportsByMe = reports))
+                    }
+                }
+
+            var tutorUsers = emptyList<AppUser>()
+            var lecturerUsers = emptyList<AppUser>()
+            fun emitTutors() {
+                val tutors = (tutorUsers + lecturerUsers)
+                    .distinctBy { it.uid }
+                    .map { appUser ->
+                        TutorSummaryUi(
+                            uid = appUser.uid,
+                            displayName = appUser.displayName,
+                            subjects = "Set in availability"
+                        )
+                    }
+                    .sortedBy { it.displayName.lowercase(Locale.getDefault()) }
+                emit(current.copy(tutors = tutors))
+            }
+
+            registrations += firestore.collection("users")
+                .whereArrayContains("roles", "tutor")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        tutorUsers = snapshot?.documents.orEmpty().mapNotNull(::toUser)
+                        emitTutors()
+                    }
+                }
+
+            registrations += firestore.collection("users")
+                .whereArrayContains("roles", "lecturer")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        lecturerUsers = snapshot?.documents.orEmpty().mapNotNull(::toUser)
+                        emitTutors()
+                    }
+                }
+        }
+
+        if (user.hasRole(UserRole.TUTOR)) {
+            registrations += firestore.collection("bookings")
+                .whereEqualTo("tutorId", user.uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        val bookings = snapshot?.documents.orEmpty()
+                            .mapNotNull(::toBooking)
+                            .sortedWith(compareBy<LessonBookingUi> { it.dateLabel }.thenBy { it.startHour })
+                        emit(current.copy(myTutorBookings = bookings))
+                    }
+                }
+
+            registrations += firestore.collection("tutor_availability")
+                .whereEqualTo("tutorId", user.uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        val availability = snapshot?.documents.orEmpty()
+                            .mapNotNull(::toAvailability)
+                            .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
+                        emit(current.copy(myAvailability = availability))
+                    }
+                }
+
+            registrations += firestore.collection("reviews")
+                .whereEqualTo("tutorId", user.uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        val reviews = snapshot?.documents.orEmpty()
+                            .mapNotNull(::toReview)
+                            .sortedByDescending { it.createdAtLabel }
+                        emit(current.copy(reviewsForMe = reviews))
+                    }
+                }
+        }
+
+        return object : ListenerRegistration {
+            override fun remove() {
+                registrations.forEach { it.remove() }
+                registrations.clear()
+            }
+        }
     }
 
     suspend fun createReport(student: AppUser, tutorUid: String, reason: String, details: String) {
@@ -320,12 +620,23 @@ class TutoringRepository(
     }
 
     suspend fun loadAdminReports(): List<TutorReportUi> {
-        return try {
-            firestore.collection("reports").get().await().documents.mapNotNull(::toReport)
-                .sortedByDescending { it.createdAtLabel }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("reports").get().await().documents.mapNotNull(::toReport)
+            .sortedByDescending { it.createdAtLabel }
+    }
+
+    suspend fun updateReportStatus(reportId: String, status: String, user: AppUser) {
+        require(user.hasRole(UserRole.ADMIN)) { "Only admins can moderate reports." }
+        require(reportId.isNotBlank()) { "Report ID cannot be empty." }
+        val normalizedStatus = status.trim().lowercase(Locale.getDefault())
+        require(normalizedStatus in setOf("open", "resolved", "dismissed")) { "Unsupported report status." }
+
+        firestore.collection("reports").document(reportId).update(
+            mapOf(
+                "status" to normalizedStatus,
+                "reviewedBy" to user.uid,
+                "reviewedAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
     }
 
     suspend fun loadAdminUserInspector(user: AppUser): AdminUserInspectorUi {
@@ -349,137 +660,101 @@ class TutoringRepository(
     }
 
     suspend fun getOpenAvailability(): List<TutorAvailabilityUi> {
-        return try {
-            firestore.collection("tutor_availability")
-                .whereEqualTo("isBooked", false)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toAvailability)
-                .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("tutor_availability")
+            .whereEqualTo("isBooked", false)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toAvailability)
+            .filter(::isFutureSlot)
+            .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
     }
 
     private suspend fun getAvailabilityForTutor(tutorId: String): List<TutorAvailabilityUi> {
-        return try {
-            firestore.collection("tutor_availability")
-                .whereEqualTo("tutorId", tutorId)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toAvailability)
-                .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("tutor_availability")
+            .whereEqualTo("tutorId", tutorId)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toAvailability)
+            .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
     }
 
     private suspend fun getBookingsForStudent(studentId: String): List<LessonBookingUi> {
-        return try {
-            firestore.collection("bookings")
-                .whereEqualTo("studentId", studentId)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toBooking)
-                .sortedWith(compareBy<LessonBookingUi> { it.dateLabel }.thenBy { it.startHour })
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("bookings")
+            .whereEqualTo("studentId", studentId)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toBooking)
+            .sortedWith(compareBy<LessonBookingUi> { it.dateLabel }.thenBy { it.startHour })
     }
 
     private suspend fun getBookingsForTutor(tutorId: String): List<LessonBookingUi> {
-        return try {
-            firestore.collection("bookings")
-                .whereEqualTo("tutorId", tutorId)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toBooking)
-                .sortedWith(compareBy<LessonBookingUi> { it.dateLabel }.thenBy { it.startHour })
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("bookings")
+            .whereEqualTo("tutorId", tutorId)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toBooking)
+            .sortedWith(compareBy<LessonBookingUi> { it.dateLabel }.thenBy { it.startHour })
     }
 
     private suspend fun getReviewsWrittenByStudent(studentId: String): List<TutorReviewUi> {
-        return try {
-            firestore.collection("reviews")
-                .whereEqualTo("studentId", studentId)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toReview)
-                .sortedByDescending { it.createdAtLabel }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("reviews")
+            .whereEqualTo("studentId", studentId)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toReview)
+            .sortedByDescending { it.createdAtLabel }
     }
 
     private suspend fun getReviewsForTutor(tutorId: String): List<TutorReviewUi> {
-        return try {
-            firestore.collection("reviews")
-                .whereEqualTo("tutorId", tutorId)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toReview)
-                .sortedByDescending { it.createdAtLabel }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("reviews")
+            .whereEqualTo("tutorId", tutorId)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toReview)
+            .sortedByDescending { it.createdAtLabel }
     }
 
     private suspend fun getReportsWrittenByStudent(studentId: String): List<TutorReportUi> {
-        return try {
-            firestore.collection("reports")
-                .whereEqualTo("studentId", studentId)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toReport)
-                .sortedByDescending { it.createdAtLabel }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("reports")
+            .whereEqualTo("studentId", studentId)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toReport)
+            .sortedByDescending { it.createdAtLabel }
     }
 
     private suspend fun getReportsForTutor(tutorId: String): List<TutorReportUi> {
-        return try {
-            firestore.collection("reports")
-                .whereEqualTo("tutorId", tutorId)
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toReport)
-                .sortedByDescending { it.createdAtLabel }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return firestore.collection("reports")
+            .whereEqualTo("tutorId", tutorId)
+            .get()
+            .await()
+            .documents
+            .mapNotNull(::toReport)
+            .sortedByDescending { it.createdAtLabel }
     }
 
     private suspend fun getTutors(): List<TutorSummaryUi> {
-        val users = try {
-            firestore.collection("users")
-                .whereArrayContains("roles", "tutor")
-                .get()
-                .await()
-                .documents
-                .mapNotNull(::toUser)
-        } catch (_: Exception) {
-            try {
-                firestore.collection("users")
-                    .get()
-                    .await()
-                    .documents
-                    .mapNotNull(::toUser)
-                    .filter { appUser -> appUser.hasRole(UserRole.TUTOR) }
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
+        val tutorDocs = firestore.collection("users")
+            .whereArrayContains("roles", "tutor")
+            .get()
+            .await()
+            .documents
+        val lecturerDocs = firestore.collection("users")
+            .whereArrayContains("roles", "lecturer")
+            .get()
+            .await()
+            .documents
+
+        val users = (tutorDocs + lecturerDocs)
+            .distinctBy { it.id }
+            .mapNotNull(::toUser)
 
         return users.map { appUser ->
             TutorSummaryUi(
@@ -491,16 +766,8 @@ class TutoringRepository(
     }
 
     private suspend fun getUserByUid(uid: String): AppUser? {
-        return try {
-            val snapshot = firestore.collection("users").document(uid).get().await()
-            if (!snapshot.exists()) {
-                null
-            } else {
-                toUser(snapshot)
-            }
-        } catch (_: Exception) {
-            null
-        }
+        val snapshot = firestore.collection("users").document(uid).get().await()
+        return if (!snapshot.exists()) null else toUser(snapshot)
     }
 
     private fun toAvailability(document: DocumentSnapshot): TutorAvailabilityUi? {
@@ -546,7 +813,10 @@ class TutoringRepository(
             dateLabel = date,
             startHour = startHour,
             endHour = endHour,
-            status = document.getString("status") ?: "booked"
+            status = document.getString("status") ?: "booked",
+            cancelReason = document.getString("cancelReason").orEmpty(),
+            cancelledBy = document.getString("cancelledBy").orEmpty(),
+            cancelledAtLabel = formatTimestamp(document.get("cancelledAt"))
         )
     }
 
@@ -563,7 +833,12 @@ class TutoringRepository(
             studentDisplayName = document.getString("studentDisplayName").orEmpty().ifBlank { studentId },
             rating = rating,
             comment = document.getString("comment").orEmpty(),
-            createdAtLabel = formatTimestamp(document.get("createdAt"))
+            createdAtLabel = formatTimestamp(document.get("createdAt")),
+            bookingId = document.getString("bookingId").orEmpty(),
+            reviewType = document.getString("reviewType").orEmpty().ifBlank { "general" },
+            subject = document.getString("subject").orEmpty(),
+            lessonDateLabel = document.getString("lessonDate").orEmpty(),
+            lessonTimeLabel = document.getString("lessonTime").orEmpty()
         )
     }
 
@@ -613,5 +888,38 @@ class TutoringRepository(
         return Instant.ofEpochMilli(millis)
             .atZone(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.getDefault()))
+    }
+
+    private fun parseLessonDateTime(date: String, hour: String): LocalDateTime? {
+        val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull() ?: return null
+        val parsedTime = runCatching {
+            LocalTime.parse(hour, DateTimeFormatter.ofPattern("HH:mm"))
+        }.getOrNull() ?: return null
+        return LocalDateTime.of(parsedDate, parsedTime)
+    }
+
+    private fun parseRequiredLessonWindow(date: String, startHour: String, endHour: String): Pair<LocalDateTime, LocalDateTime> {
+        val start = parseLessonDateTime(date, startHour)
+            ?: throw IllegalArgumentException("Start date/time is invalid.")
+        val end = parseLessonDateTime(date, endHour)
+            ?: throw IllegalArgumentException("End date/time is invalid.")
+        require(end.isAfter(start)) { "End time must be after start time." }
+        return start to end
+    }
+
+    private fun requireFutureWindow(startAt: LocalDateTime) {
+        require(startAt.isAfter(LocalDateTime.now())) {
+            "Lessons cannot be planned or booked in the past."
+        }
+    }
+
+    private fun LocalDateTime.toFirebaseTimestamp(): Timestamp {
+        val instant = atZone(ZoneId.systemDefault()).toInstant()
+        return Timestamp(Date.from(instant))
+    }
+
+    private fun isFutureSlot(slot: TutorAvailabilityUi): Boolean {
+        val start = parseLessonDateTime(slot.dateLabel, slot.startHour) ?: return false
+        return start.isAfter(LocalDateTime.now())
     }
 }

@@ -3,6 +3,8 @@
 Callable functions:
 - `adminCreateUser`
 - `adminUpdateUserRoles`
+- `adminDeleteUser`
+- `deleteAssignment`
 
 Seed script:
 - `npm run seed:admin`

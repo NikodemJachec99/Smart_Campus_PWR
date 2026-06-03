@@ -1,0 +1,55 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/(default)/documents/users/$(request.auth.uid);
+    }
+
+    function assignmentPath(assignmentId) {
+      return /databases/(default)/documents/assignments/$(assignmentId);
+    }
+
+    function rolesList() {
+      return isSignedIn() && firestore.exists(userPath()) && firestore.get(userPath()).data.roles is list
+        ? firestore.get(userPath()).data.roles
+        : [];
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && (
+        request.auth.token[role] == true
+        || (role == 'tutor' && request.auth.token.lecturer == true)
+        || rolesList().hasAny([role])
+        || (role == 'tutor' && rolesList().hasAny(['lecturer']))
+      );
+    }
+
+    function canReadSubmission(assignmentId, studentUid) {
+      return isSignedIn() && (
+        request.auth.uid == studentUid
+        || hasRole('admin')
+        || (
+          hasRole('tutor')
+          && firestore.exists(assignmentPath(assignmentId))
+          && firestore.get(assignmentPath(assignmentId)).data.tutorUid == request.auth.uid
+        )
+      );
+    }
+
+    match /submissions/{assignmentId}/{studentUid}/{fileName} {
+      allow read: if canReadSubmission(assignmentId, studentUid);
+      allow create, update: if isSignedIn()
+        && request.auth.uid == studentUid
+        && request.resource.size < 10 * 1024 * 1024;
+      allow delete: if isSignedIn() && (request.auth.uid == studentUid || hasRole('admin'));
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

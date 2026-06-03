@@ -40,38 +40,245 @@ service cloud.firestore {
       return hasRole('tutor');
     }
 
+    function isCourseMember(courseId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/courses/$(courseId)/members/$(request.auth.uid));
+    }
+
+    function isCourseOwner(courseId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/courses/$(courseId))
+        && get(/databases/$(database)/documents/courses/$(courseId)).data.tutorUid == request.auth.uid;
+    }
+
+    function availabilityPath(slotId) {
+      return /databases/$(database)/documents/tutor_availability/$(slotId);
+    }
+
+    function bookingPath(bookingId) {
+      return /databases/$(database)/documents/bookings/$(bookingId);
+    }
+
+    function isBookingParticipant(booking) {
+      return isSignedIn() && (
+        booking.studentId == request.auth.uid
+        || booking.tutorId == request.auth.uid
+      );
+    }
+
+    function hasFutureWindow(data) {
+      return data.startAt is timestamp
+        && data.endAt is timestamp
+        && data.startAt > request.time
+        && data.endAt > data.startAt;
+    }
+
+    function isAvailabilityCreate() {
+      return request.resource.data.tutorId is string
+        && request.resource.data.tutorDisplayName is string
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.date is string
+        && request.resource.data.startHour is string
+        && request.resource.data.endHour is string
+        && request.resource.data.isBooked == false
+        && hasFutureWindow(request.resource.data)
+        && request.resource.data.keys().hasOnly([
+          'tutorId',
+          'tutorDisplayName',
+          'subject',
+          'date',
+          'startHour',
+          'endHour',
+          'startAt',
+          'endAt',
+          'isBooked',
+          'createdAt'
+        ]);
+    }
+
+    function isAvailabilityScheduleEdit() {
+      return request.resource.data.tutorId == resource.data.tutorId
+        && request.resource.data.tutorDisplayName == resource.data.tutorDisplayName
+        && request.resource.data.isBooked == resource.data.isBooked
+        && resource.data.isBooked == false
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.date is string
+        && request.resource.data.startHour is string
+        && request.resource.data.endHour is string
+        && hasFutureWindow(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'subject',
+          'date',
+          'startHour',
+          'endHour',
+          'startAt',
+          'endAt',
+          'updatedAt'
+        ]);
+    }
+
+    function isBookingAvailabilitySlot(slotId) {
+      return isStudent()
+        && resource.data.isBooked == false
+        && request.resource.data.isBooked == true
+        && request.resource.data.bookingId is string
+        && request.resource.data.bookedBy == request.auth.uid
+        && request.resource.data.tutorId == resource.data.tutorId
+        && request.resource.data.tutorDisplayName == resource.data.tutorDisplayName
+        && request.resource.data.subject == resource.data.subject
+        && request.resource.data.date == resource.data.date
+        && request.resource.data.startHour == resource.data.startHour
+        && request.resource.data.endHour == resource.data.endHour
+        && request.resource.data.tutorId != request.auth.uid
+        && hasFutureWindow(request.resource.data)
+        && (!resource.data.keys().hasAny(['startAt']) || request.resource.data.startAt == resource.data.startAt)
+        && (!resource.data.keys().hasAny(['endAt']) || request.resource.data.endAt == resource.data.endAt)
+        && getAfter(bookingPath(request.resource.data.bookingId)).data.availabilityId == slotId
+        && getAfter(bookingPath(request.resource.data.bookingId)).data.studentId == request.auth.uid
+        && getAfter(bookingPath(request.resource.data.bookingId)).data.status == 'booked'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'isBooked',
+          'bookingId',
+          'bookedBy',
+          'bookedAt',
+          'startAt',
+          'endAt'
+        ]);
+    }
+
+    function isCancellingAvailabilitySlot() {
+      return isSignedIn()
+        && (
+          resource.data.bookedBy == request.auth.uid
+          || resource.data.tutorId == request.auth.uid
+        )
+        && resource.data.isBooked == true
+        && request.resource.data.isBooked == false
+        && !request.resource.data.keys().hasAny(['bookingId', 'bookedBy', 'bookedAt'])
+        && resource.data.bookingId is string
+        && getAfter(bookingPath(resource.data.bookingId)).data.status == 'cancelled'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isBooked', 'bookingId', 'bookedBy', 'bookedAt']);
+    }
+
+    function isValidStudentBookingCreate(bookingId) {
+      return isStudent()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.tutorId != request.auth.uid
+        && request.resource.data.status == 'booked'
+        && request.resource.data.availabilityId is string
+        && exists(availabilityPath(request.resource.data.availabilityId))
+        && get(availabilityPath(request.resource.data.availabilityId)).data.isBooked == false
+        && get(availabilityPath(request.resource.data.availabilityId)).data.tutorId == request.resource.data.tutorId
+        && get(availabilityPath(request.resource.data.availabilityId)).data.tutorDisplayName == request.resource.data.tutorDisplayName
+        && get(availabilityPath(request.resource.data.availabilityId)).data.subject == request.resource.data.subject
+        && get(availabilityPath(request.resource.data.availabilityId)).data.date == request.resource.data.date
+        && get(availabilityPath(request.resource.data.availabilityId)).data.startHour == request.resource.data.startHour
+        && get(availabilityPath(request.resource.data.availabilityId)).data.endHour == request.resource.data.endHour
+        && getAfter(availabilityPath(request.resource.data.availabilityId)).data.isBooked == true
+        && getAfter(availabilityPath(request.resource.data.availabilityId)).data.bookingId == bookingId
+        && getAfter(availabilityPath(request.resource.data.availabilityId)).data.bookedBy == request.auth.uid
+        && request.resource.data.lessonStartsAt is timestamp
+        && request.resource.data.lessonEndsAt is timestamp
+        && request.resource.data.lessonStartsAt > request.time
+        && request.resource.data.lessonEndsAt > request.resource.data.lessonStartsAt
+        && request.resource.data.lessonStartsAt == getAfter(availabilityPath(request.resource.data.availabilityId)).data.startAt
+        && request.resource.data.lessonEndsAt == getAfter(availabilityPath(request.resource.data.availabilityId)).data.endAt
+        && request.resource.data.keys().hasOnly([
+          'availabilityId',
+          'tutorId',
+          'tutorDisplayName',
+          'studentId',
+          'studentDisplayName',
+          'subject',
+          'date',
+          'startHour',
+          'endHour',
+          'status',
+          'lessonStartsAt',
+          'lessonEndsAt',
+          'createdAt'
+        ]);
+    }
+
+    function isCancellingBooking() {
+      return isBookingParticipant(resource.data)
+        && resource.data.status == 'booked'
+        && resource.data.availabilityId is string
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.cancelReason is string
+        && request.resource.data.cancelReason.size() > 0
+        && request.resource.data.cancelReason.size() <= 500
+        && request.resource.data.cancelledBy == request.auth.uid
+        && getAfter(availabilityPath(resource.data.availabilityId)).data.isBooked == false
+        && !getAfter(availabilityPath(resource.data.availabilityId)).data.keys().hasAny(['bookingId', 'bookedBy', 'bookedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'cancelReason',
+          'cancelledBy',
+          'cancelledAt'
+        ]);
+    }
+
+    function isValidReviewBody() {
+      return request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() > 0;
+    }
+
+    function isGeneralTutorReview() {
+      return (
+          !request.resource.data.keys().hasAny(['reviewType'])
+          || request.resource.data.reviewType == 'general'
+        )
+        && (
+          !request.resource.data.keys().hasAny(['bookingId'])
+          || request.resource.data.bookingId == ''
+        );
+    }
+
+    function isLessonTutorReview(reviewId) {
+      return request.resource.data.reviewType == 'lesson'
+        && request.resource.data.bookingId is string
+        && reviewId == 'lesson_' + request.resource.data.bookingId + '_' + request.auth.uid
+        && exists(bookingPath(request.resource.data.bookingId))
+        && get(bookingPath(request.resource.data.bookingId)).data.studentId == request.auth.uid
+        && get(bookingPath(request.resource.data.bookingId)).data.tutorId == request.resource.data.tutorId
+        && get(bookingPath(request.resource.data.bookingId)).data.status == 'booked'
+        && get(bookingPath(request.resource.data.bookingId)).data.lessonEndsAt is timestamp
+        && get(bookingPath(request.resource.data.bookingId)).data.lessonEndsAt <= request.time;
+    }
+
     match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
+      allow read: if isSignedIn();
 
       allow create: if isOwner(uid)
         && request.resource.data.roles is list
         && !request.resource.data.roles.hasAny(['admin'])
         && request.resource.data.roles.hasAny(['student', 'tutor']);
 
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isOwner(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens', 'updatedAt']));
+      allow delete: if false;
     }
 
     match /tutor_availability/{slotId} {
       allow read: if isSignedIn();
 
-      allow create: if isAdmin()
-        || (isTutor() && request.resource.data.tutorId == request.auth.uid);
+      allow create: if (isAdmin() || (isTutor() && request.resource.data.tutorId == request.auth.uid))
+        && isAvailabilityCreate();
 
-      allow update: if isAdmin()
-        || (isTutor() && resource.data.tutorId == request.auth.uid)
-        || (
-          isStudent()
-          && resource.data.isBooked == false
-          && request.resource.data.isBooked == true
-          && request.resource.data.bookedBy == request.auth.uid
-          && request.resource.data.tutorId == resource.data.tutorId
-          && request.resource.data.subject == resource.data.subject
-          && request.resource.data.date == resource.data.date
-          && request.resource.data.startHour == resource.data.startHour
-          && request.resource.data.endHour == resource.data.endHour
-        );
+      allow update: if ((isAdmin() || (isTutor() && resource.data.tutorId == request.auth.uid))
+          && isAvailabilityScheduleEdit())
+        || isCancellingAvailabilitySlot()
+        || isBookingAvailabilitySlot(slotId);
 
-      allow delete: if isAdmin() || (isTutor() && resource.data.tutorId == request.auth.uid);
+      allow delete: if isAdmin()
+        || (isTutor() && resource.data.tutorId == request.auth.uid && resource.data.isBooked == false);
     }
 
     match /bookings/{bookingId} {
@@ -81,10 +288,9 @@ service cloud.firestore {
           || resource.data.tutorId == request.auth.uid
         ));
 
-      allow create: if isAdmin()
-        || (isStudent() && request.resource.data.studentId == request.auth.uid);
-
-      allow update, delete: if isAdmin();
+      allow create: if isValidStudentBookingCreate(bookingId);
+      allow update: if isAdmin() || isCancellingBooking();
+      allow delete: if isAdmin();
     }
 
     match /reviews/{reviewId} {
@@ -92,10 +298,11 @@ service cloud.firestore {
 
       allow create: if isStudent()
         && request.resource.data.studentId == request.auth.uid
-        && request.resource.data.tutorId != request.auth.uid;
+        && request.resource.data.tutorId != request.auth.uid
+        && isValidReviewBody()
+        && (isGeneralTutorReview() || isLessonTutorReview(reviewId));
 
-      allow update, delete: if isAdmin()
-        || (isStudent() && resource.data.studentId == request.auth.uid);
+      allow update, delete: if isAdmin();
     }
 
     match /reports/{reportId} {
@@ -112,6 +319,124 @@ service cloud.firestore {
     match /classes/{classId} {
       allow read: if isSignedIn();
       allow write: if false;
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isAdmin()
+        || (isTutor() && resource.data.tutorUid == request.auth.uid)
+        || (resource.data.courseId is string && isCourseMember(resource.data.courseId));
+
+      allow create: if (isAdmin()
+          || (isTutor()
+            && request.resource.data.tutorUid == request.auth.uid
+            && get(/databases/$(database)/documents/courses/$(request.resource.data.courseId)).data.tutorUid == request.auth.uid))
+        && request.resource.data.courseId is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0;
+
+      allow update: if isAdmin()
+        || (isTutor() && resource.data.tutorUid == request.auth.uid);
+      allow delete: if false;
+
+      match /submissions/{submissionId} {
+        allow read: if isAdmin()
+          || (isSignedIn() && resource.data.studentUid == request.auth.uid)
+          || (isTutor()
+              && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.tutorUid == request.auth.uid);
+
+        allow create: if isStudent()
+          && request.resource.data.studentUid == request.auth.uid
+          && submissionId == request.auth.uid;
+
+        allow update: if isAdmin()
+          || (isStudent()
+              && resource.data.studentUid == request.auth.uid
+              && request.resource.data.studentUid == request.auth.uid);
+
+        allow delete: if isAdmin()
+          || (isStudent() && resource.data.studentUid == request.auth.uid);
+      }
+    }
+
+    match /courses/{courseId} {
+      allow read: if isSignedIn();
+
+      allow create: if (isTutor() || isAdmin())
+        && request.resource.data.tutorUid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.memberCount == 0;
+
+      allow update: if (isAdmin() || (isTutor() && resource.data.tutorUid == request.auth.uid))
+        && request.resource.data.tutorUid == resource.data.tutorUid;
+
+      allow delete: if isAdmin()
+        || (isTutor() && resource.data.tutorUid == request.auth.uid);
+
+      match /members/{uid} {
+        allow read: if isSignedIn() && (
+          request.auth.uid == uid
+          || resource.data.studentUid == request.auth.uid
+          || isAdmin()
+          || get(/databases/$(database)/documents/courses/$(courseId)).data.tutorUid == request.auth.uid
+        );
+        allow create: if isStudent()
+          && uid == request.auth.uid
+          && request.resource.data.studentUid == request.auth.uid;
+        allow delete: if isSignedIn() && (
+          request.auth.uid == uid
+          || isAdmin()
+          || get(/databases/$(database)/documents/courses/$(courseId)).data.tutorUid == request.auth.uid
+        );
+      }
+
+      match /messages/{messageId} {
+        allow read: if isCourseMember(courseId) || isCourseOwner(courseId) || isAdmin();
+        allow create: if (isCourseMember(courseId) || isCourseOwner(courseId))
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && (request.resource.data.isAnnouncement == false || isCourseOwner(courseId) || isAdmin());
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /conversations/{conversationId} {
+      function isParticipant() {
+        return isSignedIn() && request.auth.uid in resource.data.participants;
+      }
+      allow read: if isParticipant() || isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.type == 'direct'
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2;
+      allow update: if isAdmin()
+        || (isParticipant()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastMessageText', 'lastMessageSenderName', 'lastMessageAt']));
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if isSignedIn()
+          && request.resource.data.senderUid == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.recipientUid == request.auth.uid);
+      allow update: if isSignedIn()
+        && resource.data.recipientUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if isAdmin();
     }
 
     match /{document=**} {

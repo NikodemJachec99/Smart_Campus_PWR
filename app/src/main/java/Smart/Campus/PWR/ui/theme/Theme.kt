@@ -1,58 +1,36 @@
 package Smart.Campus.PWR.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-private val LightColorScheme = lightColorScheme(
-    primary = PwrNavy,
-    onPrimary = White,
-    primaryContainer = PwrBlueSoft,
-    onPrimaryContainer = PwrNavyDark,
-    secondary = PwrBlueMuted,
-    onSecondary = White,
-    secondaryContainer = AppSurfaceMuted,
-    onSecondaryContainer = TextPrimary,
-    tertiary = WarningText,
-    onTertiary = White,
-    tertiaryContainer = WarningSoft,
-    onTertiaryContainer = WarningText,
-    error = PwrRed,
-    onError = White,
-    errorContainer = PwrRedSoft,
-    onErrorContainer = PwrRed,
-    background = AppBackground,
-    onBackground = TextPrimary,
-    surface = AppSurface,
-    onSurface = TextPrimary,
-    surfaceVariant = AppSurfaceMuted,
-    onSurfaceVariant = TextSecondary,
-    outline = AppBorder,
-    outlineVariant = AppBorder,
-    scrim = Black.copy(alpha = 0.4f)
+private val EditorialColorScheme = lightColorScheme(
+    primary = ForestAccent,
+    onPrimary = CardWhite,
+    primaryContainer = ClaySoft,
+    onPrimaryContainer = ForestDeep,
+    secondary = ClayAccent,
+    onSecondary = CardWhite,
+    secondaryContainer = PaperLayer,
+    onSecondaryContainer = InkPrimary,
+    tertiary = GoldAccent,
+    onTertiary = InkPrimary,
+    tertiaryContainer = YellowSoft,
+    onTertiaryContainer = InkPrimary,
+    error = DangerText,
+    onError = CardWhite,
+    errorContainer = DangerSoft,
+    onErrorContainer = DangerText,
+    background = Bone,
+    onBackground = InkPrimary,
+    surface = Surface,
+    onSurface = InkPrimary,
+    surfaceVariant = PaperLayer,
+    onSurfaceVariant = InkSecondary,
+    outline = PaperLine,
+    outlineVariant = PaperLineSoft,
+    scrim = Black.copy(alpha = 0.36f)
 )
-
-private val DarkColorScheme = darkColorScheme(
-    primary = PwrBlueSoft,
-    onPrimary = PwrNavyDark,
-    secondary = PwrBlueMuted,
-    onSecondary = White,
-    error = PwrRed,
-    onError = White,
-    background = PwrNavyDark,
-    onBackground = White,
-    surface = ColorTokens.DarkSurface,
-    onSurface = White,
-    surfaceVariant = ColorTokens.DarkSurfaceVariant,
-    onSurfaceVariant = PwrBlueSoft,
-    outline = PwrBlueMuted
-)
-
-private object ColorTokens {
-    val DarkSurface = PwrNavyDark.copy(alpha = 0.96f)
-    val DarkSurfaceVariant = PwrNavy.copy(alpha = 0.88f)
-}
 
 @Composable
 fun SmartCampusPWRTheme(
@@ -60,11 +38,11 @@ fun SmartCampusPWRTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val ignoredDynamicColor = dynamicColor
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    @Suppress("UNUSED_PARAMETER") val ignoredDarkTheme = darkTheme
+    @Suppress("UNUSED_PARAMETER") val ignoredDynamicColor = dynamicColor
 
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = EditorialColorScheme,
         typography = Typography,
         content = content
     )

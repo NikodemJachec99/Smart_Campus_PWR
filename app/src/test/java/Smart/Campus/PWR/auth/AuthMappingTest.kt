@@ -19,7 +19,7 @@ class AuthMappingTest {
     fun parseRoles_supportsArrayAndLegacySingleRole() {
         val fromArray = AuthMapping.parseRoles(listOf("student", "lecturer"), null)
         assertTrue(fromArray.contains(UserRole.STUDENT))
-        assertTrue(fromArray.contains(UserRole.LECTURER))
+        assertTrue(fromArray.contains(UserRole.TUTOR))
 
         val fromLegacy = AuthMapping.parseRoles(null, "student")
         assertEquals(setOf(UserRole.STUDENT), fromLegacy)
