@@ -2,103 +2,167 @@ package Smart.Campus.PWR.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Bone = Color(0xFFEFEEE8)
-val WarmCream = Color(0xFFF0EADB)
-val PaperLayer = Color(0xFFE5E3D9)
-val PaperPressed = Color(0xFFD7D5C8)
-val Surface = Color(0xFFFBF7EE)
-val CardWhite = Color(0xFFFFFFFF)
+// Soft Indigo design system palette.
+// Canonical tokens — add new names here; never remove existing public vals below.
 
-val InkPrimary = Color(0xFF15140F)
-val InkSecondary = Color(0xFF4A463D)
-val InkTertiary = Color(0xFF8A8475)
-val InkDisabled = Color(0xFFB8B19E)
+// --- Surfaces ---
+val CardSurface = Color(0xFFFFFFFF)
+val Card2 = Color(0xFFFBFBFE)
+val Bg = Color(0xFFF4F3FB)
+val Bg2 = Color(0xFFECEAF6)
 
-val ForestAccent = Color(0xFF1E3A2D)
-val ForestDeep = Color(0xFF14281F)
-val ClayAccent = Color(0xFFC7572A)
-val ClaySoft = Color(0xFFF1D8CA)
-val GoldAccent = Color(0xFFC7AB39)
-val OxfordAccent = Color(0xFF1F3A6E)
-val BerryAccent = Color(0xFF7A2A4B)
+// --- Primary (indigo) ---
+val Primary = Color(0xFF5B4DF0)
+val Primary600 = Color(0xFF4A3DD6)
+val Primary700 = Color(0xFF3E33B8)
+val Primary100 = Color(0xFFE7E4FD)
+val Primary50 = Color(0xFFF1EFFE)
 
-val PaperLine = Color(0xFFCFCDBE)
-val PaperLineSoft = Color(0xFFE2E0D2)
-val ShadowSoft = Color(0x3315140F)
+// --- Ink (text) ---
+val InkToken = Color(0xFF1B1A2E)   // canonical "Ink" token; alias `Ink` below targets this
+val Ink2 = Color(0xFF56546E)
+val Ink3 = Color(0xFF8C8AA3)
+val Ink4 = Color(0xFFB8B6CB)
 
-val SuccessSoft = Color(0xFFE6EDDC)
-val SuccessText = Color(0xFF4E6B36)
-val WarningSoft = Color(0xFFF4E1CE)
-val WarningText = ClayAccent
-val DangerSoft = Color(0xFFF4D9D2)
-val DangerText = Color(0xFFB23B26)
-val InfoSoft = Color(0xFFDDE6EA)
-val InfoText = Color(0xFF2C4A6B)
+// --- Lines / dividers ---
+val Line = Color(0xFFECEBF3)
+val Line2 = Color(0xFFE2E0EE)
 
-// Backwards-compatible aliases used across the current Compose codebase.
-val Snow = Bone
-val SnowDeep = PaperLayer
-val Cloud = CardWhite
-val CloudHover = Surface
-val Mist = PaperLayer
-val PwrNavy = ForestAccent
-val PwrNavyDeep = ForestDeep
-val PwrBlue = ClayAccent
-val PwrBlueLight = GoldAccent
-val PwrBlueSoft = ClaySoft
-val PwrBlueWhisper = PaperLayer
-val InkText = InkPrimary
-val InkTextSoft = InkSecondary
-val Hairline = PaperLineSoft
-val HairlineStrong = PaperLine
+// --- Status: success ---
+val Green = Color(0xFF1E9E6A)
+val GreenBg = Color(0xFFE0F4EB)
 
-val Highlight = ForestAccent
-val HighlightSoft = ClayAccent
-val HighlightWhisper = ClaySoft
-val OnHighlight = CardWhite
+// --- Status: warning / amber ---
+val Amber = Color(0xFFC9722E)
+val AmberBg = Color(0xFFFBECDD)
 
-val Forest = ForestAccent
-val ForestSoft = Surface
-val ForestMuted = PaperLayer
-val Sage = ForestAccent
-val SageDim = ClayAccent
-val SageDeep = PaperLayer
-val Paper = Bone
-val PaperSoft = PaperLayer
-val PaperDim = PaperPressed
-val PaperText = InkPrimary
-val PaperTextSoft = InkSecondary
-val Ink = InkPrimary
-val InkSoft = InkSecondary
-val InkMuted = InkTertiary
+// --- Status: danger ---
+val Red = Color(0xFFDD5468)
+val RedBg = Color(0xFFFBE6EA)
 
-val PwrNavyDark = ForestDeep
-val PwrBlueMuted = InkTertiary
-val PwrRed = DangerText
-val PwrRedSoft = DangerSoft
-val AppBackground = Bone
-val AppSurface = Surface
-val AppSurfaceMuted = PaperLayer
-val AppBorder = PaperLineSoft
-val TextPrimary = InkPrimary
-val TextSecondary = InkSecondary
-val PurpleSoft = InfoSoft
-val PurpleText = OxfordAccent
-val OrangeSoft = ClaySoft
-val OrangeText = ClayAccent
-val YellowSoft = Color(0xFFF6EDC8)
-val YellowText = Color(0xFF7A5A28)
+// --- Star / rating ---
+val Star = Color(0xFFF6B73C)
+
+// --- Subject pastel pairs ---
+val MathBg = Color(0xFFE9E6FE)
+val MathFg = Color(0xFF5B4DF0)
+val PhysBg = Color(0xFFE1EFFE)
+val PhysFg = Color(0xFF2C6BD4)
+val CsBg = Color(0xFFDFF3EA)
+val CsFg = Color(0xFF1E9E6A)
+val StatBg = Color(0xFFFCEBDC)
+val StatFg = Color(0xFFC9722E)
+val LangBg = Color(0xFFFCE6EF)
+val LangFg = Color(0xFFC84A77)
+
+// --- Achromatic ---
 val White = Color(0xFFFFFFFF)
 val Black = Color(0xFF000000)
-val PwrGold = GoldAccent
-val PwrTeal = SuccessText
-val PwrIndigo = OxfordAccent
-val StatusBookedBg = SuccessSoft
-val StatusBookedFg = SuccessText
-val StatusCancelledBg = DangerSoft
-val StatusCancelledFg = DangerText
-val StatusPendingBg = WarningSoft
-val StatusPendingFg = WarningText
-val SurfaceGradientTop = Surface
-val SurfaceGradientBottom = PaperLayer
-val PaperHairline = PaperLineSoft
+
+// =============================================================================
+// Backwards-compatible aliases — VALUES updated for Soft Indigo; NAMES unchanged.
+// =============================================================================
+
+// --- Surfaces ---
+val Bone = Bg
+val WarmCream = Card2
+val PaperLayer = Bg2
+val PaperPressed = Bg2          // slightly darker pressed state; keep as Bg2
+val Surface = Card2
+val CardWhite = CardSurface
+
+// --- Ink ---
+val InkPrimary = InkToken
+val InkSecondary = Ink2
+val InkTertiary = Ink3
+val InkDisabled = Ink4
+
+// --- Primary family ---
+val ForestAccent = Primary
+val ForestDeep = Primary700
+val ClayAccent = Amber
+val ClaySoft = AmberBg
+val GoldAccent = Star
+val OxfordAccent = Primary600
+val BerryAccent = LangFg
+
+// --- Lines ---
+val PaperLine = Line2
+val PaperLineSoft = Line
+val ShadowSoft = Color(0x331B1A2E)
+
+// --- Status ---
+val SuccessSoft = GreenBg
+val SuccessText = Green
+val WarningSoft = AmberBg
+val WarningText = Amber
+val DangerSoft = RedBg
+val DangerText = Red
+val InfoSoft = Primary50
+val InfoText = Primary600
+
+// --- Backwards-compat secondary aliases ---
+val Snow = Bg
+val SnowDeep = Bg2
+val Cloud = CardSurface
+val CloudHover = Card2
+val Mist = Bg2
+val PwrNavy = Primary
+val PwrNavyDeep = Primary700
+val PwrBlue = Primary
+val PwrBlueLight = Primary100
+val PwrBlueSoft = Primary50
+val PwrBlueWhisper = Bg2
+val InkText = InkToken
+val InkTextSoft = Ink2
+val Hairline = Line
+val HairlineStrong = Line2
+
+val Highlight = Primary
+val HighlightSoft = Primary100
+val HighlightWhisper = Primary50
+val OnHighlight = CardSurface
+
+val Forest = Primary
+val ForestSoft = Card2
+val ForestMuted = Bg2
+val Sage = Primary
+val SageDim = Primary600
+val SageDeep = Bg2
+val Paper = Bg
+val PaperSoft = Bg2
+val PaperDim = Bg2
+val PaperText = InkToken
+val PaperTextSoft = Ink2
+val Ink = InkToken
+val InkSoft = Ink2
+val InkMuted = Ink3
+
+val PwrNavyDark = Primary700
+val PwrBlueMuted = Ink3
+val PwrRed = Red
+val PwrRedSoft = RedBg
+val AppBackground = Bg
+val AppSurface = Card2
+val AppSurfaceMuted = Bg2
+val AppBorder = Line
+val TextPrimary = InkToken
+val TextSecondary = Ink2
+val PurpleSoft = Primary50
+val PurpleText = Primary600
+val OrangeSoft = AmberBg
+val OrangeText = Amber
+val YellowSoft = AmberBg
+val YellowText = Amber
+val PwrGold = Star
+val PwrTeal = Green
+val PwrIndigo = Primary
+val StatusBookedBg = GreenBg
+val StatusBookedFg = Green
+val StatusCancelledBg = RedBg
+val StatusCancelledFg = Red
+val StatusPendingBg = AmberBg
+val StatusPendingFg = Amber
+val SurfaceGradientTop = Card2
+val SurfaceGradientBottom = Bg2
+val PaperHairline = Line
