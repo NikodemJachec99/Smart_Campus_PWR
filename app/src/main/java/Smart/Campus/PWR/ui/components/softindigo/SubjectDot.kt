@@ -33,7 +33,8 @@ fun subjectColors(name: String): Pair<Color, Color> {
             MathBg to MathFg
         n.contains("thermo") || n.contains("physics") || n.contains("phys") ->
             PhysBg to PhysFg
-        n.contains("oop") || n.contains("java") || n.contains("cs") || n.contains("programming") ->
+        n.contains("oop") || n.contains("java") || n.contains("algorithm") || n.contains("programming") ||
+            n == "cs" || n.startsWith("cs ") || n.endsWith(" cs") ->
             CsBg to CsFg
         n.contains("stat") ->
             StatBg to StatFg

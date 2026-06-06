@@ -50,7 +50,8 @@ fun InitialsAvatar(
     colorIndex: Int? = null
 ) {
     val shape = if (square) RoundedCornerShape(18.dp) else CircleShape
-    val bgColor = avatarPalette[(colorIndex ?: (name.hashCode() and Int.MAX_VALUE)) % avatarPalette.size]
+    val idx = ((colorIndex ?: name.hashCode()) % avatarPalette.size + avatarPalette.size) % avatarPalette.size
+    val bgColor = avatarPalette[idx]
     val textSp = (size.value * 0.4f).sp
 
     Box(

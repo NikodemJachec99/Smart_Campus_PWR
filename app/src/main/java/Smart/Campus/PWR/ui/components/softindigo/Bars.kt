@@ -154,7 +154,7 @@ fun RoleSwitch(
                     imageVector = SoftIcons.cap,
                     contentDescription = null,
                     tint = if (!isTutor) Primary600 else Ink3,
-                    modifier = Modifier.padding(0.dp).run { this }
+                    modifier = Modifier
                         .width(16.dp)
                         .height(16.dp)
                 )
