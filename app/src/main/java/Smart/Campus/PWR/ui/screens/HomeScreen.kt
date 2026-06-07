@@ -1,68 +1,66 @@
 package Smart.Campus.PWR.ui.screens
 
 import Smart.Campus.PWR.auth.UserRole
-import Smart.Campus.PWR.ui.components.ActivityList
-import Smart.Campus.PWR.ui.components.ActivityRow
-import Smart.Campus.PWR.ui.components.AppDangerButton
-import Smart.Campus.PWR.ui.components.EditorialTopBar
-import Smart.Campus.PWR.ui.components.HighlightCard
-import Smart.Campus.PWR.ui.components.IconCircleButton
 import Smart.Campus.PWR.ui.components.MainList
-import Smart.Campus.PWR.ui.components.MessageBlock
-import Smart.Campus.PWR.ui.components.MonoLabel
-import Smart.Campus.PWR.ui.components.PlainCard
-import Smart.Campus.PWR.ui.components.RoleSegment
-import Smart.Campus.PWR.ui.components.StatPill
+import Smart.Campus.PWR.ui.components.softindigo.Badge
+import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
+import Smart.Campus.PWR.ui.components.softindigo.CardFlat
+import Smart.Campus.PWR.ui.components.softindigo.CardQ
+import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
+import Smart.Campus.PWR.ui.components.softindigo.RoleSwitch
+import Smart.Campus.PWR.ui.components.softindigo.SearchField
+import Smart.Campus.PWR.ui.components.softindigo.SectionHead
+import Smart.Campus.PWR.ui.components.softindigo.SoftButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonSize
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
+import Smart.Campus.PWR.ui.components.softindigo.SoftDivider
+import Smart.Campus.PWR.ui.components.softindigo.SoftIconButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftTopBar
+import Smart.Campus.PWR.ui.components.softindigo.StarsRow
+import Smart.Campus.PWR.ui.components.softindigo.StatusDot
+import Smart.Campus.PWR.ui.components.softindigo.SubjectDot
+import Smart.Campus.PWR.ui.components.softindigo.Tile
+import Smart.Campus.PWR.ui.components.softindigo.subjectColors
+import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.ui.state.AssignmentUi
 import Smart.Campus.PWR.ui.state.DashboardRoutes
 import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
-import Smart.Campus.PWR.ui.theme.Cloud
-import Smart.Campus.PWR.ui.theme.Hairline
-import Smart.Campus.PWR.ui.theme.HairlineStrong
-import Smart.Campus.PWR.ui.theme.InkText
-import Smart.Campus.PWR.ui.theme.InkTextSoft
-import Smart.Campus.PWR.ui.theme.PwrBlue
-import Smart.Campus.PWR.ui.theme.PwrBlueWhisper
-import Smart.Campus.PWR.ui.theme.PwrNavy
-import Smart.Campus.PWR.ui.theme.PwrRed
+import Smart.Campus.PWR.ui.theme.Bg
+import Smart.Campus.PWR.ui.theme.BodyFontFamily
+import Smart.Campus.PWR.ui.theme.Green
+import Smart.Campus.PWR.ui.theme.Ink2
+import Smart.Campus.PWR.ui.theme.Ink3
+import Smart.Campus.PWR.ui.theme.InkToken
+import Smart.Campus.PWR.ui.theme.Primary
+import Smart.Campus.PWR.ui.theme.Primary600
+import Smart.Campus.PWR.ui.theme.Primary700
+import Smart.Campus.PWR.ui.theme.SoftType
+import Smart.Campus.PWR.ui.theme.White
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.MenuBook
-import androidx.compose.material.icons.rounded.AccessTime
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.CalendarToday
-import androidx.compose.material.icons.rounded.Cancel
-import androidx.compose.material.icons.rounded.Notifications
-import androidx.compose.material.icons.rounded.PriorityHigh
-import androidx.compose.material.icons.rounded.School
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material.icons.rounded.Upload
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,6 +68,12 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle as JTextStyle
+import java.util.Locale
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HomeTab — public entry point; signature preserved verbatim
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun HomeTab(
@@ -82,259 +86,437 @@ fun HomeTab(
     onToggleRole: () -> Unit,
     onOpenNotifications: () -> Unit
 ) {
-    val displayName = state.currentUser?.displayName.orEmpty()
-    val greeting = greetingForHour(LocalTime.now().hour)
-    val hasDualRole = state.currentUser?.hasDualRole() == true
-    val lessons = if (activeRole == UserRole.STUDENT) state.dashboardState.myStudentBookings
-    else state.dashboardState.myTutorBookings
+    when (activeRole) {
+        UserRole.STUDENT -> StudentHomeContent(
+            state = state,
+            onToggleRole = { onClearMessages(); onToggleRole() },
+            onNavigate = onNavigate,
+            onOpenNotifications = onOpenNotifications
+        )
+        UserRole.TUTOR -> TutorTodayContent(
+            state = state,
+            onToggleRole = { onClearMessages(); onToggleRole() },
+            onNavigate = onNavigate,
+            onOpenNotifications = onOpenNotifications
+        )
+        else -> StudentHomeContent(
+            state = state,
+            onToggleRole = { onClearMessages(); onToggleRole() },
+            onNavigate = onNavigate,
+            onOpenNotifications = onOpenNotifications
+        )
+    }
+}
 
-    val streak = computeStreak(lessons)
-    val hours = computeHours(lessons)
+// ─────────────────────────────────────────────────────────────────────────────
+// Student Home
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun StudentHomeContent(
+    state: SmartCampusUiState,
+    onToggleRole: () -> Unit,
+    onNavigate: (String) -> Unit,
+    onOpenNotifications: () -> Unit
+) {
+    val displayName = state.currentUser?.displayName.orEmpty()
+    val firstName = displayName.split(" ").firstOrNull().orEmpty()
+    val greeting = greetingForHour(LocalTime.now().hour)
+    val hasUnread = state.dashboardState.notificationCount > 0
+    val lessons = state.dashboardState.myStudentBookings
     val nextLesson = pickNextLesson(lessons)
     val nextLessonMinutes = nextLesson?.let { minutesUntil(it) }
-    val startingSoon = nextLessonMinutes != null && nextLessonMinutes in 0..60
-    val urgentItems = computeUrgentItems(state, activeRole)
+    val tutors = state.dashboardState.tutors
+    val isTutor = false
 
     MainList {
-        EditorialTopBar(
-            brand = "KORE TUTORING",
-            left = {
-                if (hasDualRole) {
-                    RoleSegment(
-                        activeRole = activeRole,
-                        canSwitch = true,
-                        onSwitch = { onClearMessages(); onToggleRole() }
+        // ── Top bar ──────────────────────────────────────────────────────────
+        SoftTopBar(
+            leading = {
+                InitialsAvatar(name = displayName.ifBlank { "?" }, size = 40.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = greeting,
+                        style = SoftType.meta
                     )
-                } else {
-                    MonoLabel(if (activeRole == UserRole.TUTOR) "Tutor mode" else "Student mode", color = PwrNavy)
+                    Text(
+                        text = firstName.ifBlank { displayName },
+                        style = SoftType.title
+                    )
                 }
             },
-            right = {
-                IconCircleButton(
-                    Icons.Rounded.Search,
-                    contentDescription = "Search",
-                    onClick = { onNavigate(DashboardRoutes.CALENDAR) }
-                )
-                IconCircleButton(
-                    Icons.Rounded.Notifications,
-                    contentDescription = "Notifications",
-                    dot = state.dashboardState.notificationCount > 0 || urgentItems.isNotEmpty(),
-                    onClick = onOpenNotifications
+            actions = {
+                SoftIconButton(
+                    icon = SoftIcons.bell,
+                    onClick = onOpenNotifications,
+                    dot = hasUnread
                 )
             }
         )
 
-        // 1. Greeting hero
-        Text(
-            greeting,
-            color = InkText,
-            fontWeight = FontWeight.Bold,
-            fontSize = 38.sp,
-            letterSpacing = (-1.2).sp,
-            style = MaterialTheme.typography.displaySmall
-        )
-        if (displayName.isNotBlank()) {
-            Text(
-                displayName,
-                color = InkTextSoft,
-                fontSize = 13.5.sp,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
+        // ── Role switch ───────────────────────────────────────────────────────
+        RoleSwitch(isTutor = isTutor, onToggle = onToggleRole, fullWidth = true)
 
-        MessageBlock(state.errorMessage, state.infoMessage)
-
-        // 3. Urgent banner — visible only when there's something pending
-        if (urgentItems.isNotEmpty()) {
-            UrgentBanner(items = urgentItems, onTap = onNavigate)
-        }
-
-        Spacer(Modifier.size(2.dp))
-
-        // 4. Stats row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatPill(
-                eyebrow = "Today",
-                leadingIcon = Icons.Rounded.Bolt,
-                metric = streak.toString(),
-                label = "Day Streak",
-                modifier = Modifier.weight(1f)
-            )
-            StatPill(
-                eyebrow = "Studied",
-                leadingIcon = Icons.Rounded.AccessTime,
-                metric = formatHours(hours),
-                label = "Hours Total",
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // 5. HighlightCard — next upcoming lesson
+        // ── Next lesson hero card ─────────────────────────────────────────────
         if (nextLesson != null) {
-            val counterpartLabel = if (activeRole == UserRole.STUDENT) {
-                "with ${nextLesson.tutorDisplayName}"
-            } else {
-                "with ${nextLesson.studentDisplayName}"
-            }
-            val (progress, relLabel) = nextLessonProgress(nextLesson)
-            HighlightCard(
-                eyebrow = if (startingSoon) "Starting soon · $relLabel" else "Next lesson",
-                title = nextLesson.subject,
-                subtitle = "${nextLesson.dateLabel} · ${nextLesson.timeLabel} · $counterpartLabel",
-                progress = progress,
-                progressLabel = if (startingSoon) null else relLabel,
-                urgent = startingSoon,
-                onClick = { onNavigate(DashboardRoutes.CALENDAR) }
+            NextLessonHeroCard(
+                lesson = nextLesson,
+                minutesUntil = nextLessonMinutes,
+                onMessage = { onNavigate(DashboardRoutes.CHAT) },
+                onJoin = { /* placeholder Join action */ }
             )
         } else {
-            PlainCard {
-                Text(
-                    "No upcoming lessons",
-                    color = InkText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    if (activeRole == UserRole.STUDENT) "Browse open tutor slots on the Calendar tab."
-                    else "Add availability slots so students can book you.",
-                    color = InkTextSoft,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
+            EmptyNextLessonCard()
         }
 
-        // 6. Quick actions row — role-aware
-        QuickActionsRow(activeRole = activeRole, onNavigate = onNavigate)
-
-        // 7. Recent activity title
-        Spacer(Modifier.size(4.dp))
-        Text(
-            "Recent activity".uppercase(),
-            color = PwrNavy,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.6.sp
+        // ── Search shortcut ───────────────────────────────────────────────────
+        SearchField(
+            value = "",
+            onValueChange = {},
+            placeholder = "Find a tutor or subject…",
+            big = true,
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onNavigate(DashboardRoutes.CALENDAR) }
         )
 
-        // 8. Activity list
-        val rows = buildActivityRows(state, activeRole)
-        if (rows.isEmpty()) {
-            PlainCard {
+        // ── Browse by subject ─────────────────────────────────────────────────
+        SectionHead(
+            title = "Browse by subject",
+            action = "See all",
+            onAction = { onNavigate(DashboardRoutes.CALENDAR) }
+        )
+        BrowseSubjectsGrid(
+            bookings = lessons,
+            onSubjectClick = { onNavigate(DashboardRoutes.CALENDAR) }
+        )
+
+        // ── Recommended tutors ────────────────────────────────────────────────
+        SectionHead(
+            title = "Recommended for you",
+            action = "See all",
+            onAction = { onNavigate(DashboardRoutes.CALENDAR) }
+        )
+        if (tutors.isEmpty()) {
+            CardQ(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    "No recent activity yet.",
-                    color = InkTextSoft,
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "No tutors to show yet — check the Calendar tab.",
+                    style = SoftType.bodySm
                 )
             }
         } else {
-            ActivityList {
-                rows.forEachIndexed { index, row ->
-                    ActivityRow(
-                        icon = row.icon,
-                        title = row.title,
-                        subtitle = row.subtitle,
-                        trailingMetric = row.trailingMetric,
-                        showDivider = index != rows.lastIndex
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                tutors.take(4).forEach { tutor ->
+                    TutorRecommendationCard(tutor = tutor)
                 }
             }
         }
 
-        Spacer(Modifier.size(4.dp))
-        AppDangerButton(
-            text = "Refresh dashboard",
-            onClick = { onClearMessages(); onRefresh() }
-        )
+        // Bottom padding so nav bar doesn't cover last card
+        Spacer(Modifier.height(4.dp))
     }
 }
 
-// ---- Sub-components ---------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Tutor Today
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun DualRoleBadge(activeRole: UserRole, onSwitch: () -> Unit) {
-    val otherRole = if (activeRole == UserRole.STUDENT) "tutor" else "student"
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(PwrBlueWhisper)
-            .border(0.5.dp, Hairline, RoundedCornerShape(50))
-            .clickable { onSwitch() }
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text(
-            "Active as ${activeRole.displayName.uppercase()}",
-            color = PwrNavy,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp
+private fun TutorTodayContent(
+    state: SmartCampusUiState,
+    onToggleRole: () -> Unit,
+    onNavigate: (String) -> Unit,
+    onOpenNotifications: () -> Unit
+) {
+    val displayName = state.currentUser?.displayName.orEmpty()
+    val firstName = displayName.split(" ").firstOrNull().orEmpty()
+    val greeting = greetingForHour(LocalTime.now().hour)
+    val hasUnread = state.dashboardState.notificationCount > 0
+    val allTutorBookings = state.dashboardState.myTutorBookings
+    val todayStr = LocalDate.now().toString()
+    val todayBookings = allTutorBookings.filter {
+        it.status == "booked" && it.dateLabel == todayStr
+    }
+    val isTutor = true
+
+    // Tutor summary stats
+    val sessionsCount = todayBookings.size
+    val bookedHours = computeHours(todayBookings)
+    val lessonsLeft = todayBookings.filter { session ->
+        val dt = parseLessonDateTime(session)
+        dt != null && dt.isAfter(LocalDateTime.now())
+    }.size
+
+    // Today's date label for hero card
+    val todayDayName = LocalDate.now().dayOfWeek
+        .getDisplayName(JTextStyle.FULL, Locale.ENGLISH)
+    val todayDateNum = LocalDate.now().dayOfMonth
+    val todayMonthName = LocalDate.now().month
+        .getDisplayName(JTextStyle.SHORT, Locale.ENGLISH)
+    val todayLabel = "$todayDayName · $todayMonthName $todayDateNum"
+
+    MainList {
+        // ── Top bar ──────────────────────────────────────────────────────────
+        SoftTopBar(
+            leading = {
+                InitialsAvatar(name = displayName.ifBlank { "?" }, size = 40.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(text = greeting, style = SoftType.meta)
+                    Text(
+                        text = firstName.ifBlank { displayName },
+                        style = SoftType.title
+                    )
+                }
+            },
+            actions = {
+                SoftIconButton(
+                    icon = SoftIcons.bell,
+                    onClick = onOpenNotifications,
+                    dot = hasUnread
+                )
+            }
         )
-        Text("·", color = PwrNavy.copy(alpha = 0.4f))
-        Icon(
-            Icons.Rounded.SwapHoriz,
-            contentDescription = null,
-            tint = PwrNavy,
-            modifier = Modifier.size(13.dp)
+
+        // ── Role switch ───────────────────────────────────────────────────────
+        RoleSwitch(isTutor = isTutor, onToggle = onToggleRole, fullWidth = true)
+
+        // ── Today summary hero card ───────────────────────────────────────────
+        TutorSummaryHeroCard(
+            dateLabel = todayLabel,
+            lessonsLeft = lessonsLeft,
+            sessionsCount = sessionsCount,
+            bookedHours = bookedHours
         )
-        Text(
-            "switch to $otherRole",
-            color = PwrNavy.copy(alpha = 0.7f),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 0.6.sp
+
+        // ── Today's schedule ─────────────────────────────────────────────────
+        SectionHead(
+            title = "Today's schedule",
+            action = "Full week",
+            onAction = { onNavigate(DashboardRoutes.CALENDAR) }
         )
+        if (todayBookings.isEmpty()) {
+            CardQ(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "No lessons booked for today.",
+                    style = SoftType.bodySm
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                todayBookings.sortedWith(compareBy { it.startHour })
+                    .forEach { session ->
+                        val now = LocalDateTime.now()
+                        val dt = parseLessonDateTime(session)
+                        val sessionState = when {
+                            dt == null -> "soon"
+                            dt.isAfter(now) && minutesUntil(session) != null &&
+                                minutesUntil(session)!! <= 90 -> "next"
+                            dt.isAfter(now) -> "soon"
+                            else -> "done"
+                        }
+                        TodayScheduleRow(session = session, sessionState = sessionState)
+                    }
+            }
+        }
+
+        // ── Booking requests ─────────────────────────────────────────────────
+        // DESIGN-PLACEHOLDER: no booking-request model in the backend.
+        // Showing upcoming bookings styled as request cards instead.
+        SectionHead(title = "Upcoming bookings")
+        val upcomingBookings = allTutorBookings
+            .filter { it.status == "booked" }
+            .filter {
+                val dt = parseLessonDateTime(it)
+                dt != null && dt.isAfter(LocalDateTime.now())
+            }
+            .sortedWith(compareBy({ it.dateLabel }, { it.startHour }))
+            .take(3)
+
+        if (upcomingBookings.isEmpty()) {
+            CardQ(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "No upcoming bookings.",
+                    style = SoftType.bodySm
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                upcomingBookings.forEach { booking ->
+                    UpcomingBookingCard(booking = booking)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared sub-composables
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-private fun UrgentBanner(items: List<String>, onTap: (String) -> Unit) {
-    Box(
+private fun NextLessonHeroCard(
+    lesson: LessonBookingUi,
+    minutesUntil: Long?,
+    onMessage: () -> Unit,
+    onJoin: () -> Unit
+) {
+    val timeUntilLabel = when {
+        minutesUntil == null -> "Upcoming"
+        minutesUntil <= 0 -> "Starting now"
+        minutesUntil < 60 -> "In ${minutesUntil}m"
+        else -> {
+            val h = minutesUntil / 60
+            val m = minutesUntil % 60
+            if (m == 0L) "In ${h}h" else "In ${h}h ${m}m"
+        }
+    }
+    val heroShape = RoundedCornerShape(22.dp)
+    val gradient = Brush.linearGradient(
+        colors = listOf(Color(0xFF6D5DF2), Color(0xFF5037DC)),
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+    )
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(PwrRed.copy(alpha = 0.10f), PwrRed.copy(alpha = 0.04f))
-                )
-            )
-            .border(0.7.dp, PwrRed.copy(alpha = 0.20f), RoundedCornerShape(20.dp))
-            .clickable { onTap(DashboardRoutes.ASSIGNMENTS) }
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .clip(heroShape)
+            .background(gradient)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(PwrRed.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 14.dp)) {
+            // Header row: time badge + "Next lesson" label
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Rounded.PriorityHigh,
-                    contentDescription = null,
-                    tint = PwrRed,
-                    modifier = Modifier.size(15.dp)
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(White.copy(alpha = 0.2f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = SoftIcons.clock,
+                        contentDescription = null,
+                        tint = White,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = timeUntilLabel,
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = White
+                        )
+                    )
+                }
+                Text(
+                    text = "Next lesson",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = White.copy(alpha = 0.8f)
+                    )
                 )
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(
-                    "Needs attention".uppercase(),
-                    color = PwrRed,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.4.sp
+
+            Spacer(Modifier.height(12.dp))
+
+            // Tutor avatar + lesson info
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(13.dp)
+            ) {
+                InitialsAvatar(
+                    name = lesson.tutorDisplayName,
+                    size = 50.dp,
+                    square = true
                 )
-                items.forEach { line ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        line,
-                        color = InkText,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        style = MaterialTheme.typography.bodyMedium
+                        text = lesson.subject,
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 19.sp,
+                            color = White
+                        )
+                    )
+                    Text(
+                        text = "with ${lesson.tutorDisplayName}",
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                            color = White.copy(alpha = 0.85f)
+                        )
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        HeroBadge("${lesson.startHour}–${lesson.endHour}")
+                        HeroBadge("Online")
+                    }
+                }
+            }
+        }
+
+        // Action buttons strip
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(White.copy(alpha = 0.08f))
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SoftButton(
+                text = "Message",
+                onClick = onMessage,
+                modifier = Modifier.weight(1f),
+                variant = SoftButtonVariant.Ghost,
+                size = SoftButtonSize.Sm
+            )
+            // Override colors to match white-on-indigo design
+            Box(
+                modifier = Modifier
+                    .weight(1.5f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(White)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(color = Primary)
+                    ) { onJoin() }
+                    .padding(vertical = 10.dp, horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = SoftIcons.video,
+                        contentDescription = null,
+                        tint = Primary600,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = "Join lesson",
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Primary600
+                        )
                     )
                 }
             }
@@ -343,211 +525,418 @@ private fun UrgentBanner(items: List<String>, onTap: (String) -> Unit) {
 }
 
 @Composable
-private fun QuickActionsRow(activeRole: UserRole, onNavigate: (String) -> Unit) {
-    val actions = if (activeRole == UserRole.STUDENT) {
-        listOf(
-            QuickAction("Courses", Icons.Rounded.School, DashboardRoutes.COURSES),
-            QuickAction("Find tutor", Icons.Rounded.Search, DashboardRoutes.CALENDAR),
-            QuickAction("My tasks", Icons.AutoMirrored.Rounded.MenuBook, DashboardRoutes.ASSIGNMENTS),
-            QuickAction("Reviews", Icons.Rounded.Star, DashboardRoutes.REVIEWS)
+private fun HeroBadge(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(White.copy(alpha = 0.16f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        style = TextStyle(
+            fontFamily = BodyFontFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.5.sp,
+            color = White
         )
-    } else {
-        listOf(
-            QuickAction("Courses", Icons.Rounded.School, DashboardRoutes.COURSES),
-            QuickAction("Add slot", Icons.Rounded.Add, DashboardRoutes.CALENDAR),
-            QuickAction("Publish task", Icons.Rounded.Upload, DashboardRoutes.ASSIGNMENTS),
-            QuickAction("Reviews", Icons.Rounded.Star, DashboardRoutes.REVIEWS)
+    )
+}
+
+@Composable
+private fun EmptyNextLessonCard() {
+    CardQ(modifier = Modifier.fillMaxWidth()) {
+        Text(text = "No upcoming lessons", style = SoftType.title)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Browse open tutor slots on the Calendar tab.",
+            style = SoftType.bodySm
         )
     }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        actions.forEach { action ->
-            QuickActionChip(
-                label = action.label,
-                icon = action.icon,
-                onClick = { onNavigate(action.route) },
-                modifier = Modifier.weight(1f)
-            )
+}
+
+@Composable
+private fun BrowseSubjectsGrid(
+    bookings: List<LessonBookingUi>,
+    onSubjectClick: () -> Unit
+) {
+    // Derive subjects from bookings; fall back to a static starter set
+    val subjectsFromBookings = bookings.map { it.subject }.distinct()
+    val staticSubjects = listOf("Calculus", "Lin. Algebra", "Thermo", "OOP / Java")
+    val subjects = (subjectsFromBookings + staticSubjects).distinct().take(6)
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        subjects.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                row.forEach { subject ->
+                    val (_, fg) = subjectColors(subject)
+                    Tile(
+                        modifier = Modifier.weight(1f),
+                        padding = 13.dp
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(11.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onSubjectClick() }
+                        ) {
+                            SubjectDot(subject = subject, size = 40.dp, icon = SoftIcons.cap)
+                            Column {
+                                Text(
+                                    text = subject,
+                                    style = TextStyle(
+                                        fontFamily = BodyFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = InkToken
+                                    )
+                                )
+                                Text(
+                                    text = "Find tutors",
+                                    style = SoftType.meta
+                                )
+                            }
+                        }
+                    }
+                }
+                // Fill last slot if row is odd
+                if (row.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun QuickActionChip(label: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(Cloud)
-            .border(0.7.dp, Hairline, RoundedCornerShape(18.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 12.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+private fun TutorRecommendationCard(tutor: Smart.Campus.PWR.ui.state.TutorSummaryUi) {
+    CardQ(modifier = Modifier.fillMaxWidth(), padding = 14.dp) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(13.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(PwrBlueWhisper)
-                    .border(0.5.dp, Hairline, RoundedCornerShape(50)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = PwrNavy,
-                    modifier = Modifier.size(15.dp)
+            InitialsAvatar(name = tutor.displayName, size = 52.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = tutor.displayName,
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.5.sp,
+                            color = InkToken
+                        )
+                    )
+                    // No rate in TutorSummaryUi; show a placeholder primary-colored label
+                    Text(
+                        text = "Book",
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Primary600
+                        )
+                    )
+                }
+                Text(
+                    text = tutor.subjects.ifBlank { "Various subjects" },
+                    style = SoftType.bodySm,
+                    modifier = Modifier.padding(top = 1.dp)
                 )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StarsRow(value = 5f)
+                    Text(text = "5.0", style = SoftType.meta)
+                }
             }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tutor Today sub-composables
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun TutorSummaryHeroCard(
+    dateLabel: String,
+    lessonsLeft: Int,
+    sessionsCount: Int,
+    bookedHours: Double
+) {
+    val heroShape = RoundedCornerShape(22.dp)
+    val gradient = Brush.linearGradient(
+        colors = listOf(Color(0xFF6D5DF2), Color(0xFF5037DC)),
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(heroShape)
+            .background(gradient)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                label,
-                color = InkText,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.bodySmall
+                text = dateLabel,
+                style = TextStyle(
+                    fontFamily = BodyFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.5.sp,
+                    color = White.copy(alpha = 0.85f)
+                )
+            )
+            Text(
+                text = "$lessonsLeft ${if (lessonsLeft == 1) "lesson" else "lessons"} left",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(White.copy(alpha = 0.2f))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                style = TextStyle(
+                    fontFamily = BodyFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.5.sp,
+                    color = White
+                )
             )
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            listOf(
+                sessionsCount.toString() to "Sessions",
+                "${formatHours(bookedHours)}h" to "Booked",
+                "–" to "Earning"
+            ).forEachIndexed { index, (value, label) ->
+                if (index > 0) {
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(36.dp)
+                            .background(White.copy(alpha = 0.2f))
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = if (index > 0) 12.dp else 0.dp)
+                ) {
+                    Text(
+                        text = value,
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp,
+                            color = White
+                        )
+                    )
+                    Text(
+                        text = label,
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.5.sp,
+                            color = White.copy(alpha = 0.8f)
+                        )
+                    )
+                }
+            }
+        }
     }
 }
 
-private data class QuickAction(val label: String, val icon: ImageVector, val route: String)
-
-private data class ActivityRowData(
-    val icon: ImageVector,
-    val title: String,
-    val subtitle: String,
-    val trailingMetric: String? = null
-)
-
-// ---- Logic helpers ----------------------------------------------------------
-
-private fun computeUrgentItems(state: SmartCampusUiState, activeRole: UserRole): List<String> {
-    val items = mutableListOf<String>()
-    val currentUid = state.currentUser?.uid ?: return emptyList()
-
-    if (activeRole == UserRole.STUDENT) {
-        // Student view: assignments where I haven't submitted yet.
-        val mySubmissions = state.dashboardState.mySubmissions
-        val openAssignments = state.dashboardState.assignments.filter { assignment ->
-            mySubmissions.none { it.assignmentId == assignment.id }
-        }
-        if (openAssignments.isNotEmpty()) {
-            val count = openAssignments.size
-            items += "$count assignment${if (count == 1) "" else "s"} waiting for your submission"
+@Composable
+private fun TodayScheduleRow(
+    session: LessonBookingUi,
+    sessionState: String   // "next" | "soon" | "done"
+) {
+    val isOpen = session.studentDisplayName.isBlank()
+    val cardModifier = Modifier.fillMaxWidth()
+    if (isOpen) {
+        CardFlat(modifier = cardModifier) {
+            ScheduleRowContent(session = session, sessionState = sessionState, isOpen = true)
         }
     } else {
-        // Tutor view: assignments I've published.
-        val myAssignments = state.dashboardState.assignments.filter { it.tutorUid == currentUid }
-        if (myAssignments.isNotEmpty()) {
-            val count = myAssignments.size
-            items += "$count published assignment${if (count == 1) "" else "s"} — check submissions"
+        CardQ(modifier = cardModifier, padding = 14.dp) {
+            ScheduleRowContent(session = session, sessionState = sessionState, isOpen = false)
         }
     }
-
-    return items
 }
 
-private fun buildActivityRows(state: SmartCampusUiState, activeRole: UserRole): List<ActivityRowData> {
-    val rows = mutableListOf<ActivityRowData>()
+@Composable
+private fun ScheduleRowContent(
+    session: LessonBookingUi,
+    sessionState: String,
+    isOpen: Boolean
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(13.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Time column
+        Column(modifier = Modifier.width(50.dp)) {
+            Text(
+                text = session.startHour,
+                style = TextStyle(
+                    fontFamily = BodyFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = InkToken
+                )
+            )
+            val durationMin = run {
+                val start = parseHour(session.startHour)
+                val end = parseHour(session.endHour)
+                if (start != null && end != null && end > start) ((end - start) * 60).toInt() else null
+            }
+            if (durationMin != null) {
+                Text(
+                    text = "${durationMin} min",
+                    style = SoftType.meta
+                )
+            }
+        }
 
-    val reviews = if (activeRole == UserRole.STUDENT) state.dashboardState.reviewsByMe
-    else state.dashboardState.reviewsForMe
-    reviews.firstOrNull()?.let { review ->
-        rows += ActivityRowData(
-            icon = Icons.Rounded.Star,
-            title = if (activeRole == UserRole.STUDENT) "Review for ${review.tutorDisplayName}"
-            else "Review from ${review.studentDisplayName}",
-            subtitle = review.createdAtLabel.ifBlank { "Recently" },
-            trailingMetric = "${review.rating}/5"
+        // Vertical divider
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .height(52.dp)
+                .background(Smart.Campus.PWR.ui.theme.Line)
         )
+
+        // Session info
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = session.subject,
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.5.sp,
+                        color = InkToken
+                    )
+                )
+                when {
+                    isOpen -> Badge(text = "Open", tone = BadgeTone.Gray)
+                    sessionState == "next" -> Badge(
+                        text = "Next",
+                        tone = BadgeTone.Green,
+                        leadingIcon = null
+                    )
+                    sessionState == "soon" -> Badge(text = "Soon", tone = BadgeTone.Prim)
+                    else -> Badge(text = "Done", tone = BadgeTone.Gray)
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                if (!isOpen && session.studentDisplayName.isNotBlank()) {
+                    InitialsAvatar(name = session.studentDisplayName, size = 20.dp)
+                }
+                Text(
+                    text = if (isOpen) "Waiting for a student" else "${session.studentDisplayName} · Online",
+                    style = SoftType.bodySm
+                )
+            }
+
+            if (!isOpen) {
+                Text(
+                    text = "View →",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = Primary600
+                    ),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
     }
-
-    val cancelled = (state.dashboardState.myStudentBookings + state.dashboardState.myTutorBookings)
-        .firstOrNull { it.status == "cancelled" }
-    cancelled?.let { lesson ->
-        rows += ActivityRowData(
-            icon = Icons.Rounded.Cancel,
-            title = "Cancelled · ${lesson.subject}",
-            subtitle = "${lesson.dateLabel} · ${lesson.timeLabel}"
-        )
-    }
-
-    val booked = (state.dashboardState.myStudentBookings + state.dashboardState.myTutorBookings)
-        .firstOrNull { it.status == "booked" }
-    booked?.let { lesson ->
-        rows += ActivityRowData(
-            icon = Icons.Rounded.CalendarToday,
-            title = "Booked · ${lesson.subject}",
-            subtitle = "${lesson.dateLabel} · ${lesson.timeLabel}"
-        )
-    }
-
-    val assignment = state.dashboardState.assignments.firstOrNull()
-    assignment?.let { a -> addAssignmentActivityRow(state, a, rows) }
-
-    return rows.take(4)
 }
 
-private fun addAssignmentActivityRow(state: SmartCampusUiState, a: AssignmentUi, rows: MutableList<ActivityRowData>) {
-    rows += ActivityRowData(
-        icon = Icons.AutoMirrored.Rounded.MenuBook,
-        title = if (a.tutorUid == state.currentUser?.uid) "Published · ${a.title}"
-        else "Assignment · ${a.title}",
-        subtitle = if (a.dueDateLabel.isNotBlank()) "Due ${a.dueDateLabel}" else "Recently"
-    )
+@Composable
+private fun UpcomingBookingCard(booking: LessonBookingUi) {
+    // DESIGN-PLACEHOLDER: no booking-request model in the backend.
+    // Rendering upcoming confirmed bookings in the request-card style.
+    // Accept/Decline buttons are intentionally omitted (no request flow exists).
+    CardQ(modifier = Modifier.fillMaxWidth(), padding = 15.dp) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            InitialsAvatar(name = booking.studentDisplayName, size = 42.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = booking.studentDisplayName,
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = InkToken
+                        )
+                    )
+                    Badge(text = "Confirmed", tone = BadgeTone.Green)
+                }
+                val (subjectBg, subjectFg) = subjectColors(booking.subject)
+                Text(
+                    text = "${booking.subject} · ${booking.dateLabel} · ${booking.startHour}",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.5.sp,
+                        color = subjectFg
+                    ),
+                    modifier = Modifier.padding(top = 1.dp)
+                )
+            }
+        }
+    }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Logic helpers (preserved from original)
+// ─────────────────────────────────────────────────────────────────────────────
 
 private fun greetingForHour(hour: Int): String = when (hour) {
     in 5..11 -> "Good morning"
     in 12..16 -> "Good afternoon"
     in 17..20 -> "Good evening"
     else -> "Good night"
-}
-
-private fun computeStreak(lessons: List<LessonBookingUi>): Int {
-    val today = LocalDate.now()
-    val bookedDates: Set<LocalDate> = lessons
-        .filter { it.status == "booked" }
-        .mapNotNull { runCatching { LocalDate.parse(it.dateLabel) }.getOrNull() }
-        .filter { !it.isAfter(today) }
-        .toSet()
-    if (bookedDates.isEmpty()) return 0
-
-    var streak = 0
-    var cursor = today
-    while (cursor in bookedDates) {
-        streak++
-        cursor = cursor.minusDays(1)
-    }
-    return streak
-}
-
-private fun computeHours(lessons: List<LessonBookingUi>): Double {
-    return lessons.filter { it.status == "booked" }.sumOf { lesson ->
-        val start = parseHour(lesson.startHour)
-        val end = parseHour(lesson.endHour)
-        if (start != null && end != null && end > start) end - start else 0.0
-    }
-}
-
-private fun parseHour(s: String): Double? {
-    val parts = s.split(":")
-    if (parts.size != 2) return null
-    val h = parts[0].toIntOrNull() ?: return null
-    val m = parts[1].toIntOrNull() ?: return null
-    return h + m / 60.0
-}
-
-private fun formatHours(h: Double): String {
-    if (h <= 0) return "0"
-    val rounded = (h * 10).toInt() / 10.0
-    return if (rounded % 1.0 == 0.0) rounded.toInt().toString()
-    else String.format(java.util.Locale.ENGLISH, "%.1f", rounded)
 }
 
 private fun pickNextLesson(lessons: List<LessonBookingUi>): LessonBookingUi? {
@@ -575,36 +964,42 @@ private fun minutesUntil(lesson: LessonBookingUi): Long? {
     return java.time.Duration.between(LocalDateTime.now(), dt).toMinutes()
 }
 
-private fun nextLessonProgress(lesson: LessonBookingUi): Pair<Float, String> {
-    val now = LocalDateTime.now()
-    val dt = parseLessonDateTime(lesson) ?: return 0f to ""
-    val totalMinutes = java.time.Duration.between(now, dt).toMinutes()
-    val totalHours = totalMinutes / 60.0
-
-    val progress = if (totalHours <= 0) 1f
-    else (1.0 - (totalHours / 24.0)).coerceIn(0.0, 1.0).toFloat()
-
-    val label = when {
-        totalMinutes <= 0 -> "starting"
-        totalMinutes < 60 -> "in ${totalMinutes}m"
-        totalMinutes < 24 * 60 -> {
-            val h = totalMinutes / 60
-            val m = totalMinutes - h * 60
-            if (m == 0L) "in ${h}h" else "in ${h}h ${m}m"
-        }
-        else -> {
-            val days = totalMinutes / (24 * 60)
-            "in ${days}d"
-        }
+private fun computeHours(lessons: List<LessonBookingUi>): Double {
+    return lessons.filter { it.status == "booked" }.sumOf { lesson ->
+        val start = parseHour(lesson.startHour)
+        val end = parseHour(lesson.endHour)
+        if (start != null && end != null && end > start) end - start else 0.0
     }
-    return progress to label
 }
 
+private fun parseHour(s: String): Double? {
+    val parts = s.split(":")
+    if (parts.size != 2) return null
+    val h = parts[0].toIntOrNull() ?: return null
+    val m = parts[1].toIntOrNull() ?: return null
+    return h + m / 60.0
+}
+
+private fun formatHours(h: Double): String {
+    if (h <= 0) return "0"
+    val rounded = (h * 10).toInt() / 10.0
+    return if (rounded % 1.0 == 0.0) rounded.toInt().toString()
+    else String.format(java.util.Locale.ENGLISH, "%.1f", rounded)
+}
+
+// Silence legacy import warnings — these symbols are pulled in transitively
+// via the theme but not directly referenced in this file.
 @Suppress("UNUSED")
-private val UnusedHairlineStrong = HairlineStrong
+private val _unusedBg = Bg
 @Suppress("UNUSED")
-private val UnusedPwrBlue = PwrBlue
+private val _unusedP7 = Primary700
 @Suppress("UNUSED")
-private val UnusedColor = Color.Transparent
+private val _unusedGreen = Green
 @Suppress("UNUSED")
-private val UnusedWidth = 1.dp
+private val _unusedInk2 = Ink2
+@Suppress("UNUSED")
+private val _unusedInk3 = Ink3
+@Suppress("UNUSED")
+private val _unusedPrimary = Primary
+@Suppress("UNUSED")
+private val _unusedTransparent = Color.Transparent
