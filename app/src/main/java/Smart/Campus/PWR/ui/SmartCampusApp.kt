@@ -6,26 +6,54 @@ import Smart.Campus.PWR.ui.components.EditorialCard
 import Smart.Campus.PWR.ui.components.EditorialScreen
 import Smart.Campus.PWR.ui.components.MonoLabel
 import Smart.Campus.PWR.ui.components.Pill
+import Smart.Campus.PWR.ui.components.softindigo.Badge
+import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
+import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
+import Smart.Campus.PWR.ui.components.softindigo.SoftButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
+import Smart.Campus.PWR.ui.components.softindigo.SoftIconButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftTextField
+import Smart.Campus.PWR.ui.components.softindigo.cardShadow
+import Smart.Campus.PWR.ui.components.softindigo.primShadow
+import Smart.Campus.PWR.ui.components.softindigo.raiseShadow
+import Smart.Campus.PWR.ui.components.softindigo.softShadow
+import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.ui.state.AppScreen
 import Smart.Campus.PWR.ui.state.RegisterFormState
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
 import Smart.Campus.PWR.ui.theme.AppBackground
 import Smart.Campus.PWR.ui.theme.AppSurface
+import Smart.Campus.PWR.ui.theme.Bg
+import Smart.Campus.PWR.ui.theme.CardSurface
 import Smart.Campus.PWR.ui.theme.CardWhite
 import Smart.Campus.PWR.ui.theme.ClayAccent
 import Smart.Campus.PWR.ui.theme.DisplayFontFamily
 import Smart.Campus.PWR.ui.theme.ForestAccent
+import Smart.Campus.PWR.ui.theme.Green
+import Smart.Campus.PWR.ui.theme.Ink2
+import Smart.Campus.PWR.ui.theme.Ink3
 import Smart.Campus.PWR.ui.theme.InkPrimary
 import Smart.Campus.PWR.ui.theme.InkSecondary
 import Smart.Campus.PWR.ui.theme.InkTertiary
+import Smart.Campus.PWR.ui.theme.InkToken
+import Smart.Campus.PWR.ui.theme.Line
+import Smart.Campus.PWR.ui.theme.Line2
 import Smart.Campus.PWR.ui.theme.MonoFontFamily
 import Smart.Campus.PWR.ui.theme.PaperLine
+import Smart.Campus.PWR.ui.theme.Primary
+import Smart.Campus.PWR.ui.theme.Primary600
 import Smart.Campus.PWR.ui.theme.PwrBlueSoft
 import Smart.Campus.PWR.ui.theme.PwrNavy
 import Smart.Campus.PWR.ui.theme.PwrRed
+import Smart.Campus.PWR.ui.theme.Red
+import Smart.Campus.PWR.ui.theme.SoftType
+import Smart.Campus.PWR.ui.theme.Star
+import Smart.Campus.PWR.ui.theme.White
+import Smart.Campus.PWR.ui.theme.BodyFontFamily
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,9 +63,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Check
@@ -52,14 +85,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -189,71 +230,267 @@ private fun OnboardingScreen(
     onGetStarted: () -> Unit,
     onSignIn: () -> Unit
 ) {
-    EditorialScreen {
-        Box(
+    val heroGradient = Brush.linearGradient(
+        colorStops = arrayOf(
+            0.00f to Color(0xFF6D5DF2),
+            0.48f to Color(0xFF5B4DF0),
+            1.00f to Color(0xFF4A3DD6)
+        )
+    )
+    val heroShape = RoundedCornerShape(26.dp)
+
+    val tutors = listOf(
+        Triple("Marta Lewandowska", "Calculus II",      "45 zł"),
+        Triple("Olivia Kowal",      "OOP · Java",       "50 zł"),
+        Triple("Jakub Wójcik",      "Thermodynamics",   "60 zł")
+    )
+    val tutorColorIndices = listOf(0, 2, 1)
+    val tutorOffsets = listOf(0.dp, 26.dp, 12.dp)
+
+    Scaffold(containerColor = Bg) { scaffoldPadding ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(368.dp)
-                .background(
-                    brush = Brush.verticalGradient(listOf(ForestAccent, ForestAccent.copy(alpha = 0.92f))),
-                    shape = RoundedCornerShape(topStart = 200.dp, topEnd = 200.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
-                )
-                .padding(24.dp)
+                .fillMaxSize()
+                .padding(scaffoldPadding)
+                .verticalScroll(rememberScrollState())
         ) {
+            // ── Top bar ────────────────────────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                MonoLabel("PWR TUTORING", color = Color.White.copy(alpha = 0.72f), fontSize = 9.sp, letterSpacing = 2.2.sp)
-                MonoLabel("2026", color = Color.White.copy(alpha = 0.72f), fontSize = 9.sp, letterSpacing = 2.2.sp)
-            }
-            Text(
-                "alpha",
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 80.dp),
-                color = Color.White.copy(alpha = 0.13f),
-                fontFamily = DisplayFontFamily,
-                fontStyle = FontStyle.Italic,
-                fontSize = 76.sp
-            )
-            Column(
-                modifier = Modifier.align(Alignment.BottomStart),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                MonoLabel("A new chapter", color = Color.White.copy(alpha = 0.72f), fontSize = 10.sp, letterSpacing = 1.8.sp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = SoftIcons.cap,
+                            contentDescription = null,
+                            tint = White,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                    Text(
+                        "Korepetycje PWr",
+                        style = SoftType.title.copy(fontSize = 14.sp, color = InkToken)
+                    )
+                }
                 Text(
-                    "Learn from\nsomeone who\njust aced it.",
-                    color = Color.White,
-                    fontFamily = DisplayFontFamily,
-                    fontSize = 39.sp,
-                    lineHeight = 38.sp,
-                    letterSpacing = 0.sp
+                    "Skip",
+                    style = SoftType.meta,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onSignIn() }
+                )
+            }
+
+            // ── Hero card ──────────────────────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .fillMaxWidth()
+                    .height(330.dp)
+                    .raiseShadow(heroShape)
+                    .clip(heroShape)
+                    .background(brush = heroGradient)
+            ) {
+                // Soft glow blobs
+                Box(
+                    modifier = Modifier
+                        .offset(x = (-40).dp, y = (-50).dp)
+                        .align(Alignment.TopEnd)
+                        .size(180.dp)
+                        .clip(CircleShape)
+                        .background(White.copy(alpha = 0.12f))
+                )
+                Box(
+                    modifier = Modifier
+                        .offset(x = (-30).dp, y = 60.dp)
+                        .align(Alignment.BottomStart)
+                        .size(160.dp)
+                        .clip(CircleShape)
+                        .background(White.copy(alpha = 0.08f))
+                )
+
+                // Eyebrow + star badge
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Twoja uczelnia, Twoi ludzie",
+                        style = SoftType.eyebrow.copy(
+                            color = White.copy(alpha = 0.85f),
+                            fontSize = 11.5.sp
+                        )
+                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(White.copy(alpha = 0.18f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = SoftIcons.star,
+                            contentDescription = null,
+                            tint = Star,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            "4.9",
+                            style = SoftType.meta.copy(color = White, fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+
+                // Floating tutor mini-cards
+                Column(
+                    modifier = Modifier
+                        .padding(start = 20.dp, end = 20.dp, top = 64.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    tutors.forEachIndexed { i, (name, subject, rate) ->
+                        Row(
+                            modifier = Modifier
+                                .offset(x = tutorOffsets[i])
+                                .softShadow(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(White.copy(alpha = 0.96f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            InitialsAvatar(
+                                name = name,
+                                size = 36.dp,
+                                colorIndex = tutorColorIndices[i]
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    name,
+                                    style = SoftType.title.copy(fontSize = 13.sp),
+                                    maxLines = 1
+                                )
+                                Text(
+                                    subject,
+                                    style = SoftType.meta.copy(fontSize = 11.5.sp)
+                                )
+                            }
+                            Text(
+                                rate,
+                                style = SoftType.title.copy(
+                                    fontSize = 13.sp,
+                                    color = Primary600
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Body ──────────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 22.dp)
+            ) {
+                Text(
+                    buildAnnotatedString {
+                        append("Learn from someone who just ")
+                        withStyle(SpanStyle(color = Primary600)) { append("aced it") }
+                        append(".")
+                    },
+                    style = SoftType.display.copy(
+                        lineHeight = 36.sp,
+                        letterSpacing = (-0.5).sp,
+                        color = InkToken
+                    )
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "A vetted circle of PWr students and lecturers, ready to walk you through whatever the lecture skipped — calculus, thermo, OOP, anything.",
+                    style = SoftType.body,
+                    modifier = Modifier.fillMaxWidth(0.85f)
+                )
+
+                Spacer(Modifier.weight(1f, fill = false))
+                Spacer(Modifier.height(28.dp))
+
+                // 3-dot pager
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(22.dp)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(Primary)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(Line2)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(Line2)
+                    )
+                }
+
+                // CTA button
+                SoftButton(
+                    text = "Get started",
+                    onClick = onGetStarted,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = SoftIcons.arrow
+                )
+
+                // Sign-in link
+                Text(
+                    buildAnnotatedString {
+                        append("Already have an account? ")
+                        withStyle(SpanStyle(color = Primary600, fontWeight = FontWeight.Bold)) {
+                            append("Sign in")
+                        }
+                    },
+                    style = SoftType.meta,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 14.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSignIn() }
                 )
             }
         }
-
-        Text(
-            "A small, vetted circle of PWr students and lecturers who can sit down with you and walk through what you missed: calculus, thermo, OOP, anything.",
-            color = InkSecondary,
-            style = MaterialTheme.typography.bodyLarge
-        )
-
-        MessageBanner(state)
-
-        AppPrimaryButton(
-            text = "Get started",
-            onClick = onGetStarted,
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = CardWhite, modifier = Modifier.size(16.dp)) }
-        )
-        AppDangerButton(
-            text = "Have an account? Sign in",
-            onClick = onSignIn,
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
+
 
 @Composable
 private fun LoginScreen(
@@ -264,44 +501,278 @@ private fun LoginScreen(
     onOpenRegister: () -> Unit,
     onClearMessages: () -> Unit
 ) {
-    AuthScaffold(
-        eyebrow = "Welcome back",
-        title = "The good kind\nof overtime.",
-        subtitle = "Pick up where the lecture left off."
-    ) {
-        OutlinedTextField(
-            value = state.loginInput,
-            onValueChange = {
-                onClearMessages()
-                onLoginChanged(it)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("PWr login or email") },
-            singleLine = true
-        )
-        OutlinedTextField(
-            value = state.passwordInput,
-            onValueChange = {
-                onClearMessages()
-                onPasswordChanged(it)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Password") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation()
-        )
+    var passwordVisible by remember { mutableStateOf(false) }
+    var rememberMe by remember { mutableStateOf(true) }
 
-        MessageBanner(state)
+    Scaffold(containerColor = Bg) { scaffoldPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(scaffoldPadding)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // ── Top bar: back arrow ────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SoftIconButton(
+                    icon = SoftIcons.back,
+                    onClick = onOpenRegister  // navigate back (to onboarding/register)
+                )
+                Spacer(Modifier.width(1.dp)) // keep layout balanced
+            }
 
-        AppPrimaryButton(
-            text = if (state.isBusy) "Signing in..." else "Sign in",
-            onClick = onLoginClick,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !state.isBusy,
-            leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = CardWhite, modifier = Modifier.size(16.dp)) }
-        )
+            // ── Header ────────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 14.dp)
+            ) {
+                // 52dp indigo cap badge
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .primShadow(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = SoftIcons.cap,
+                        contentDescription = null,
+                        tint = White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
 
-        AppDangerButton("Create account", onClick = onOpenRegister, modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy)
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "Welcome back.",
+                    style = SoftType.display.copy(
+                        lineHeight = 36.sp,
+                        letterSpacing = (-0.5).sp,
+                        color = InkToken
+                    )
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Pick up right where the lecture left off.",
+                    style = SoftType.body
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                // ── Email field ───────────────────────────────────────────────
+                SoftTextField(
+                    value = state.loginInput,
+                    onValueChange = {
+                        onClearMessages()
+                        onLoginChanged(it)
+                    },
+                    label = "PWr login or email",
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // ── Password field with Show affordance ───────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Password",
+                        style = SoftType.meta.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Ink2,
+                            fontSize = 12.sp
+                        )
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CardSurface)
+                            .border(1.dp, Line2, RoundedCornerShape(12.dp))
+                            .padding(vertical = 13.dp, horizontal = 14.dp)
+                    ) {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = state.passwordInput,
+                            onValueChange = {
+                                onClearMessages()
+                                onPasswordChanged(it)
+                            },
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontFamily = BodyFontFamily,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 15.sp,
+                                color = InkToken
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Primary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 42.dp)
+                        )
+                        if (state.passwordInput.isEmpty()) {
+                            Text(
+                                "••••••••",
+                                style = SoftType.body.copy(color = Ink3)
+                            )
+                        }
+                        Text(
+                            if (passwordVisible) "Hide" else "Show",
+                            style = SoftType.meta.copy(
+                                color = Primary600,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.5.sp
+                            ),
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { passwordVisible = !passwordVisible }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // ── Remember me + Forgot ──────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (rememberMe) Primary else Line2)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { rememberMe = !rememberMe },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (rememberMe) {
+                                Icon(
+                                    imageVector = SoftIcons.check,
+                                    contentDescription = null,
+                                    tint = White,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            "Remember me",
+                            style = SoftType.meta.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = Ink2,
+                                fontSize = 13.sp
+                            )
+                        )
+                    }
+                    Text(
+                        "Forgot?",
+                        style = SoftType.title.copy(
+                            fontSize = 13.sp,
+                            color = Primary600
+                        )
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // ── Error / success message ───────────────────────────────────
+                if (state.errorMessage != null) {
+                    Text(
+                        state.errorMessage,
+                        style = SoftType.bodySm.copy(color = Red),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Red.copy(alpha = 0.08f))
+                            .padding(12.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                if (state.infoMessage != null) {
+                    Text(
+                        state.infoMessage,
+                        style = SoftType.bodySm.copy(color = Green),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Green.copy(alpha = 0.08f))
+                            .padding(12.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // ── Sign in button ────────────────────────────────────────────
+                SoftButton(
+                    text = if (state.isBusy) "Signing in..." else "Sign in",
+                    onClick = onLoginClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = SoftIcons.arrow,
+                    enabled = !state.isBusy
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                // ── "or" divider ──────────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(modifier = Modifier.weight(1f).height(1.dp).background(Line))
+                    Text("or", style = SoftType.meta)
+                    Box(modifier = Modifier.weight(1f).height(1.dp).background(Line))
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // ── SSO button — DESIGN-PLACEHOLDER: PWr SSO ─────────────────
+                SoftButton(
+                    text = "Continue with PWr SSO",
+                    onClick = { /* DESIGN-PLACEHOLDER: PWr SSO */ },
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = SoftButtonVariant.Outline,
+                    enabled = !state.isBusy
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // ── "Not on PWr?" footer link ─────────────────────────────────
+                Text(
+                    buildAnnotatedString {
+                        append("Not on PWr? ")
+                        withStyle(SpanStyle(color = Primary600, fontWeight = FontWeight.Bold)) {
+                            append("Request access")
+                        }
+                    },
+                    style = SoftType.meta,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { /* DESIGN-PLACEHOLDER: request access */ }
+                )
+            }
+        }
     }
 }
 
