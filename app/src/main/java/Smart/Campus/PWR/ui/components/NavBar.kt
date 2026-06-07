@@ -62,6 +62,7 @@ import com.kyant.backdrop.Backdrop
 private fun DashboardTab.icon(): ImageVector = when (this) {
     DashboardTab.HOME -> Icons.Rounded.Home
     DashboardTab.CALENDAR -> Icons.Rounded.CalendarMonth
+    DashboardTab.LESSONS -> Icons.Rounded.CalendarMonth
     DashboardTab.ASSIGNMENTS -> Icons.AutoMirrored.Rounded.Assignment
     DashboardTab.CHAT -> Icons.AutoMirrored.Rounded.Chat
     DashboardTab.REVIEWS -> Icons.AutoMirrored.Rounded.MenuBook
@@ -71,7 +72,8 @@ private fun DashboardTab.icon(): ImageVector = when (this) {
 private data class NavbarItem(
     val tab: DashboardTab,
     val icon: ImageVector,
-    val label: String
+    val label: String,
+    val unreadCount: Int = 0
 )
 
 @Composable
@@ -79,15 +81,17 @@ fun LiquidGlassNavbar(
     currentRoute: String,
     activeRole: UserRole,
     backdrop: Backdrop,
+    chatUnreadCount: Int = 0,
     modifier: Modifier = Modifier,
     onTabSelected: (DashboardTab) -> Unit
 ) {
-    val navbarItems = remember(activeRole) {
+    val navbarItems = remember(activeRole, chatUnreadCount) {
         DashboardTab.entries.map { tab ->
             NavbarItem(
                 tab = tab,
                 icon = tab.icon(),
-                label = tab.labelFor(activeRole)
+                label = tab.labelFor(activeRole),
+                unreadCount = if (tab == DashboardTab.CHAT) chatUnreadCount else 0
             )
         }
     }
@@ -180,6 +184,7 @@ private fun DashboardTab.labelFor(activeRole: UserRole): String = when (this) {
     DashboardTab.HOME -> if (activeRole == UserRole.TUTOR) "Today" else "Home"
     DashboardTab.CALENDAR -> if (activeRole == UserRole.TUTOR) "Slots" else "Discover"
     DashboardTab.ASSIGNMENTS -> "Tasks"
+    DashboardTab.LESSONS -> "Lessons"
     DashboardTab.CHAT -> "Chat"
     DashboardTab.REVIEWS -> "Reviews"
     DashboardTab.PROFILE -> "You"
@@ -257,6 +262,25 @@ private fun NavbarPillItem(
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 lineHeight = 10.sp
             )
+        }
+        if (item.unreadCount > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 5.dp, end = 7.dp)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFC7572A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (item.unreadCount > 9) "9+" else item.unreadCount.toString(),
+                    color = Cloud,
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 9.sp
+                )
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ import Smart.Campus.PWR.ui.components.AppDangerButton
 import Smart.Campus.PWR.ui.components.AppPrimaryButton
 import Smart.Campus.PWR.ui.components.AvailabilityCard
 import Smart.Campus.PWR.ui.components.EditorialTopBar
-import Smart.Campus.PWR.ui.components.LiquidGlassNavbar
+import Smart.Campus.PWR.ui.components.SoftBottomNav
 import Smart.Campus.PWR.ui.components.MainList
 import Smart.Campus.PWR.ui.components.MessageBlock
 import Smart.Campus.PWR.ui.components.MonoLabel
@@ -21,6 +21,7 @@ import Smart.Campus.PWR.ui.screens.ChatTab
 import Smart.Campus.PWR.ui.screens.ConversationScreen
 import Smart.Campus.PWR.ui.screens.CoursesTab
 import Smart.Campus.PWR.ui.screens.HomeTab
+import Smart.Campus.PWR.ui.screens.LessonsTab
 import Smart.Campus.PWR.ui.screens.NotificationsScreen
 import Smart.Campus.PWR.ui.screens.ProfileTab
 import Smart.Campus.PWR.ui.screens.ReviewsTab
@@ -133,10 +134,11 @@ fun MainShellScreen(
         showNotifications = false
         val conversationId = notification.data["conversationId"]
         val courseId = notification.data["courseId"]
+        val messageId = notification.data["messageId"].orEmpty()
         when {
-            conversationId != null -> viewModel.openDirectConversation(conversationId)
+            conversationId != null -> viewModel.openDirectConversation(conversationId, messageId)
             courseId != null && (notification.type == "chat" || notification.type == "announcement") ->
-                viewModel.openCourseConversation(courseId)
+                viewModel.openCourseConversation(courseId, messageId)
             else -> navController.navigateToRoute(DashboardRoutes.ASSIGNMENTS)
         }
     }
@@ -155,7 +157,18 @@ fun MainShellScreen(
                         onBack = { viewModel.closeConversation() },
                         onComposerChanged = viewModel::onComposerChanged,
                         onSend = viewModel::sendMessage,
-                        onAnnouncementToggle = viewModel::onAnnouncementToggle
+                        onAnnouncementToggle = viewModel::onAnnouncementToggle,
+                        onRetryMessage = viewModel::retryMessage,
+                        onLoadOlderMessages = viewModel::loadOlderMessages,
+                        onConversationSearchChanged = viewModel::onConversationSearchChanged,
+                        onAttachmentSelected = viewModel::onAttachmentSelected,
+                        onClearAttachment = viewModel::clearPendingAttachment,
+                        onReplyToMessage = viewModel::replyToMessage,
+                        onClearReply = viewModel::clearReplyDraft,
+                        onReactToMessage = viewModel::reactToMessage,
+                        onDeleteMessage = viewModel::deleteMessage,
+                        onReportMessage = viewModel::reportMessage,
+                        onClearNewMessageHint = viewModel::clearNewMessageHint
                     )
                 }
 
@@ -204,7 +217,20 @@ fun MainShellScreen(
                                     onAddAvailability = onAddAvailability,
                                     onBookTutorSlot = onBookTutorSlot,
                                     onDeleteAvailability = onDeleteAvailability,
-                                    onCancelBooking = onCancelBooking
+                                    onCancelBooking = onCancelBooking,
+                                    onTutorSearchTutorChanged = viewModel::onTutorSearchTutorChanged,
+                                    onTutorSearchSubjectChanged = viewModel::onTutorSearchSubjectChanged,
+                                    onTutorSearchDateChanged = viewModel::onTutorSearchDateChanged,
+                                    onClearTutorSearchFilters = viewModel::clearTutorSearchFilters
+                                )
+                            }
+                            composable(DashboardRoutes.LESSONS) {
+                                LessonsTab(
+                                    state = state,
+                                    activeRole = activeRole,
+                                    onNavigate = { navController.navigateToRoute(it) },
+                                    onCancelBooking = onCancelBooking,
+                                    onClearMessages = onClearMessages
                                 )
                             }
                             composable(DashboardRoutes.ASSIGNMENTS) {
@@ -227,10 +253,12 @@ fun MainShellScreen(
                             composable(DashboardRoutes.CHAT) {
                                 ChatTab(
                                     state = state,
-                                    onOpenDirect = viewModel::openDirectConversation,
+                                    onOpenDirect = { viewModel.openDirectConversation(it) },
                                     onOpenDirectWith = viewModel::openDirectWith,
-                                    onOpenCourse = viewModel::openCourseConversation,
-                                    onManageCourses = { navController.navigateToRoute(DashboardRoutes.COURSES) }
+                                    onOpenCourse = { viewModel.openCourseConversation(it) },
+                                    onManageCourses = { navController.navigateToRoute(DashboardRoutes.COURSES) },
+                                    onSearchChanged = viewModel::onChatSearchChanged,
+                                    onFilterChanged = viewModel::onChatInboxFilterChanged
                                 )
                             }
                             composable(DashboardRoutes.COURSES) {
@@ -244,7 +272,7 @@ fun MainShellScreen(
                                     onEnroll = viewModel::enrollInCourse,
                                     onLeave = viewModel::leaveCourse,
                                     onDeleteCourse = viewModel::deleteCourse,
-                                    onOpenChat = viewModel::openCourseConversation,
+                                    onOpenChat = { viewModel.openCourseConversation(it) },
                                     onLoadRoster = viewModel::loadRoster,
                                     onClearMessages = onClearMessages
                                 )
@@ -276,10 +304,12 @@ fun MainShellScreen(
                         }
                     }
 
-                    LiquidGlassNavbar(
+                    SoftBottomNav(
                         currentRoute = currentRoute,
                         activeRole = activeRole,
-                        backdrop = backdrop,
+                        chatUnreadCount = state.chat.directUnreadCount + state.dashboardState.courseCatalog
+                            .filter { it.isEnrolled || it.isOwner }
+                            .sumOf { it.unreadCount },
                         modifier = Modifier.align(Alignment.BottomCenter),
                         onTabSelected = { tab -> navController.navigateToTab(tab) }
                     )

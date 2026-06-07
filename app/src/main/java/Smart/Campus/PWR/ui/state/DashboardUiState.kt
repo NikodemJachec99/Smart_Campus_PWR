@@ -6,7 +6,8 @@ enum class DashboardTab(val route: String, val label: String) {
     ASSIGNMENTS(DashboardRoutes.ASSIGNMENTS, "Tasks"),
     CHAT(DashboardRoutes.CHAT, "Chat"),
     REVIEWS(DashboardRoutes.REVIEWS, "Reviews"),
-    PROFILE(DashboardRoutes.PROFILE, "Profile")
+    PROFILE(DashboardRoutes.PROFILE, "Profile"),
+    LESSONS(DashboardRoutes.LESSONS, "Lessons")
 }
 
 object DashboardRoutes {
@@ -19,6 +20,7 @@ object DashboardRoutes {
     const val COURSES = "courses"
     const val CONVERSATION = "conversation"
     const val NOTIFICATIONS = "notifications"
+    const val LESSONS = "lessons"
 }
 
 data class TutorAvailabilityUi(
