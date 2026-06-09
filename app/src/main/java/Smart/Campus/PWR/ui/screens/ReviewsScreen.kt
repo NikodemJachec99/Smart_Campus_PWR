@@ -1,49 +1,79 @@
 package Smart.Campus.PWR.ui.screens
 
 import Smart.Campus.PWR.auth.UserRole
-import Smart.Campus.PWR.ui.components.AppPrimaryButton
-import Smart.Campus.PWR.ui.components.EditorialCard
-import Smart.Campus.PWR.ui.components.MainList
 import Smart.Campus.PWR.ui.components.MessageBlock
-import Smart.Campus.PWR.ui.components.MonoLabel
-import Smart.Campus.PWR.ui.components.ReviewCard
-import Smart.Campus.PWR.ui.components.ReportCard
-import Smart.Campus.PWR.ui.components.SectionCard
+import Smart.Campus.PWR.ui.components.MainList
 import Smart.Campus.PWR.ui.components.TutorPicker
+import Smart.Campus.PWR.ui.components.softindigo.Badge
+import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
+import Smart.Campus.PWR.ui.components.softindigo.CardFlat
+import Smart.Campus.PWR.ui.components.softindigo.CardQ
+import Smart.Campus.PWR.ui.components.softindigo.Chip
+import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
+import Smart.Campus.PWR.ui.components.softindigo.ProgressBar
+import Smart.Campus.PWR.ui.components.softindigo.SectionHead
+import Smart.Campus.PWR.ui.components.softindigo.SoftButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonSize
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
+import Smart.Campus.PWR.ui.components.softindigo.SoftCard
+import Smart.Campus.PWR.ui.components.softindigo.SoftDivider
+import Smart.Campus.PWR.ui.components.softindigo.SoftTextField
+import Smart.Campus.PWR.ui.components.softindigo.SoftTopBar
+import Smart.Campus.PWR.ui.components.softindigo.StarSize
+import Smart.Campus.PWR.ui.components.softindigo.StarsRow
+import Smart.Campus.PWR.ui.components.softindigo.subjectColors
+import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
-import Smart.Campus.PWR.ui.theme.ClayAccent
-import Smart.Campus.PWR.ui.theme.InkText
-import Smart.Campus.PWR.ui.theme.InkTextSoft
-import Smart.Campus.PWR.ui.theme.PaperLine
-import Smart.Campus.PWR.ui.theme.PwrGold
-import Smart.Campus.PWR.ui.theme.PwrNavy
-import Smart.Campus.PWR.ui.theme.PwrRed
-import Smart.Campus.PWR.ui.theme.TextPrimary
-import Smart.Campus.PWR.ui.theme.TextSecondary
+import Smart.Campus.PWR.ui.state.TutorReviewUi
+import Smart.Campus.PWR.ui.theme.Bg2
+import Smart.Campus.PWR.ui.theme.BodyFontFamily
+import Smart.Campus.PWR.ui.theme.CardSurface
+import Smart.Campus.PWR.ui.theme.Ink2
+import Smart.Campus.PWR.ui.theme.Ink3
+import Smart.Campus.PWR.ui.theme.Ink4
+import Smart.Campus.PWR.ui.theme.InkToken
+import Smart.Campus.PWR.ui.theme.Line
+import Smart.Campus.PWR.ui.theme.Primary
+import Smart.Campus.PWR.ui.theme.Primary100
+import Smart.Campus.PWR.ui.theme.Primary50
+import Smart.Campus.PWR.ui.theme.Primary600
+import Smart.Campus.PWR.ui.theme.Red
+import Smart.Campus.PWR.ui.theme.RedBg
+import Smart.Campus.PWR.ui.theme.SoftType
+import Smart.Campus.PWR.ui.theme.Star
+import Smart.Campus.PWR.ui.theme.White
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +81,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
+// ─── Public entry point (signature preserved exactly) ─────────────────────────
 
 @Composable
 fun ReviewsTab(
@@ -69,109 +101,93 @@ fun ReviewsTab(
 ) {
     MainList {
         MessageBlock(state.errorMessage, state.infoMessage)
-        MonoLabel("Reviews")
-        Text(
-            if (activeRole == UserRole.STUDENT) "Rate your tutors." else "Your reviews.",
-            style = MaterialTheme.typography.headlineLarge,
-            color = TextPrimary
+
+        SoftTopBar(
+            title = if (activeRole == UserRole.STUDENT) "Rate a lesson" else "Reviews about you"
         )
 
         if (activeRole == UserRole.STUDENT) {
-            StudentReviewComposer(
+            StudentReviewsContent(
                 state = state,
+                onClearMessages = onClearMessages,
                 onReviewTutorChanged = onReviewTutorChanged,
                 onReviewBookingChanged = onReviewBookingChanged,
                 onReviewRatingChanged = onReviewRatingChanged,
                 onReviewCommentChanged = onReviewCommentChanged,
-                onClearMessages = onClearMessages,
-                onSubmitReview = onSubmitReview
+                onSubmitReview = onSubmitReview,
+                onReportTutorChanged = onReportTutorChanged,
+                onReportReasonChanged = onReportReasonChanged,
+                onReportDetailsChanged = onReportDetailsChanged,
+                onSubmitReport = onSubmitReport
             )
-
-            SectionHeader("Reviews you wrote")
-            if (state.dashboardState.reviewsByMe.isEmpty()) {
-                EmptyHint("Nothing yet — pick a tutor or a finished lesson above to leave your first review.")
-            }
-            state.dashboardState.reviewsByMe.forEach { ReviewCard(it) }
-
-            SectionCard("Report a tutor", accent = PwrRed) {
-                Text(
-                    "Use this only for serious issues. Reports go to the admin team.",
-                    color = InkTextSoft,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                TutorPicker(state.dashboardState.tutors, state.reportForm.tutorUid, onReportTutorChanged)
-                OutlinedTextField(
-                    state.reportForm.reason,
-                    onReportReasonChanged,
-                    label = { Text("Reason") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    state.reportForm.details,
-                    onReportDetailsChanged,
-                    label = { Text("Details") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                AppPrimaryButton(
-                    text = "Send report",
-                    enabled = state.reportForm.tutorUid.isNotBlank() && state.reportForm.reason.isNotBlank(),
-                    onClick = { onClearMessages(); onSubmitReport() }
-                )
-            }
-
-            if (state.dashboardState.reportsByMe.isNotEmpty()) {
-                SectionHeader("Reports you sent")
-                state.dashboardState.reportsByMe.forEach { ReportCard(it) }
-            }
         } else {
-            SectionHeader("Reviews about you")
-            if (state.dashboardState.reviewsForMe.isEmpty()) {
-                EmptyHint("No reviews yet. When a student rates a lesson or your tutoring, it shows up here.")
-            }
-            state.dashboardState.reviewsForMe.forEach { ReviewCard(it) }
+            TutorReviewsContent(state = state)
         }
     }
 }
 
+// ─── STUDENT branch ───────────────────────────────────────────────────────────
+
 @Composable
-private fun StudentReviewComposer(
+private fun StudentReviewsContent(
     state: SmartCampusUiState,
+    onClearMessages: () -> Unit,
     onReviewTutorChanged: (String) -> Unit,
     onReviewBookingChanged: (String) -> Unit,
     onReviewRatingChanged: (String) -> Unit,
     onReviewCommentChanged: (String) -> Unit,
-    onClearMessages: () -> Unit,
-    onSubmitReview: () -> Unit
+    onSubmitReview: () -> Unit,
+    onReportTutorChanged: (String) -> Unit,
+    onReportReasonChanged: (String) -> Unit,
+    onReportDetailsChanged: (String) -> Unit,
+    onSubmitReport: () -> Unit
 ) {
-    val reviewedBookingIds = state.dashboardState.reviewsByMe
-        .mapNotNull { it.bookingId.ifBlank { null } }
-        .toSet()
-    val lessons = state.dashboardState.myStudentBookings
-        .filter { it.id !in reviewedBookingIds && it.canBeReviewedAfterLesson() }
-
+    val lessons = reviewableLessons(state)
+    val selectedLesson = lessons.firstOrNull { it.id == state.reviewForm.bookingId }
+    val selectedTutor = state.dashboardState.tutors.firstOrNull { it.uid == state.reviewForm.tutorUid }
+    val selectedRating = state.reviewForm.rating.toIntOrNull()?.coerceIn(1, 5) ?: 5
     val isLessonMode = state.reviewForm.bookingId.isNotBlank()
     val isTutorMode = state.reviewForm.tutorUid.isNotBlank()
     val canSubmit = isLessonMode || isTutorMode
 
-    SectionCard("Write a review", accent = PwrGold) {
-        MonoLabel("Step 1 · What are you reviewing?")
+    // ── Step 1 – pick a lesson ────────────────────────────────────────────────
+    SoftCard {
+        Text(
+            text = "STEP 1 — WHAT ARE YOU REVIEWING?",
+            style = SoftType.eyebrow,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
 
         if (lessons.isNotEmpty()) {
-            Text("Finished lessons", color = InkTextSoft, style = MaterialTheme.typography.bodyMedium)
-            lessons.forEach { lesson ->
-                LessonChoiceRow(
-                    lesson = lesson,
-                    selected = state.reviewForm.bookingId == lesson.id,
-                    onSelect = {
-                        onReviewTutorChanged("")
-                        onReviewBookingChanged(lesson.id)
-                    }
-                )
+            Text(
+                text = "Finished lessons",
+                style = SoftType.meta,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                lessons.forEach { lesson ->
+                    LessonPickRow(
+                        lesson = lesson,
+                        selected = state.reviewForm.bookingId == lesson.id,
+                        onSelect = {
+                            onReviewTutorChanged("")
+                            onReviewBookingChanged(lesson.id)
+                        }
+                    )
+                }
             }
-            Text("Or a tutor in general", color = InkTextSoft, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Or rate a tutor in general",
+                style = SoftType.meta,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
         } else {
-            Text("Pick a tutor to review", color = InkTextSoft, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "Pick a tutor to review",
+                style = SoftType.meta,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
         }
 
         TutorPicker(
@@ -182,107 +198,759 @@ private fun StudentReviewComposer(
                 onReviewTutorChanged(it)
             }
         )
+    }
 
-        if (canSubmit) {
-            MonoLabel("Step 2 · Your rating")
-            StarRatingInput(
-                rating = state.reviewForm.rating.toIntOrNull()?.coerceIn(1, 5) ?: 5,
-                onRatingChanged = { onReviewRatingChanged(it.toString()) }
-            )
-            OutlinedTextField(
-                state.reviewForm.comment,
-                onReviewCommentChanged,
-                label = { Text("Comment") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
-            AppPrimaryButton(
-                text = if (isLessonMode) "Submit lesson review" else "Submit tutor review",
-                enabled = state.reviewForm.comment.isNotBlank(),
-                onClick = { onClearMessages(); onSubmitReview() }
-            )
-        } else {
+    // ── Step 2 – rate & comment (only when something is selected) ─────────────
+    if (canSubmit) {
+        // Lesson/tutor summary card
+        val summaryTitle = selectedLesson?.subject
+            ?: selectedTutor?.displayName.orEmpty()
+        val summaryMeta = selectedLesson?.let {
+            "with ${it.tutorDisplayName} · ${it.dateLabel}"
+        } ?: selectedTutor?.subjects.orEmpty()
+        val summaryName = selectedLesson?.tutorDisplayName ?: selectedTutor?.displayName ?: ""
+
+        CardQ {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                InitialsAvatar(name = summaryName, size = 44.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = summaryTitle,
+                        style = SoftType.title,
+                        color = InkToken
+                    )
+                    Text(
+                        text = summaryMeta,
+                        style = SoftType.meta
+                    )
+                }
+            }
+        }
+
+        // Star picker
+        SoftCard {
             Text(
-                "Select a lesson or a tutor above to rate them.",
-                color = TextSecondary,
-                style = MaterialTheme.typography.bodySmall
+                text = "STEP 2 — HOW WAS IT?",
+                style = SoftType.eyebrow,
+                modifier = Modifier.padding(bottom = 12.dp)
             )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    InteractiveStarsRow(
+                        rating = selectedRating,
+                        onRatingChanged = { onReviewRatingChanged(it.toString()) }
+                    )
+                    Text(
+                        text = ratingLabel(selectedRating),
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Primary600
+                        )
+                    )
+                }
+            }
+        }
+
+        // Quick tags ("What went well?")
+        WentWellTags(
+            comment = state.reviewForm.comment,
+            onCommentChanged = onReviewCommentChanged
+        )
+
+        // Free-text note + anon toggle + submit
+        SoftCard {
+            Text(
+                text = "Add a note",
+                style = SoftType.h3,
+                color = InkToken,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Text(
+                text = "Optional · helps other students",
+                style = SoftType.meta,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+            SoftTextField(
+                value = state.reviewForm.comment,
+                onValueChange = onReviewCommentChanged,
+                placeholder = "Share a few words to help other students…",
+                singleLine = false,
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // DESIGN-PLACEHOLDER: no anon field — visual toggle only, no state
+            CardFlat {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Post anonymously",
+                            style = SoftType.title,
+                            color = InkToken
+                        )
+                        Text(
+                            text = "Hide your name on this review",
+                            style = SoftType.meta
+                        )
+                    }
+                    // DESIGN-PLACEHOLDER: visual toggle only
+                    AnonTogglePlaceholder()
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            SoftButton(
+                text = if (isLessonMode) "Submit lesson review" else "Submit tutor review",
+                onClick = { onClearMessages(); onSubmitReview() },
+                enabled = true,
+                variant = SoftButtonVariant.Primary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    } else {
+        CardFlat {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Primary50),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = SoftIcons.star,
+                        contentDescription = null,
+                        tint = Primary600,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Select a lesson or tutor above",
+                        style = SoftType.title,
+                        color = InkToken
+                    )
+                    Text(
+                        text = "Your rating form will appear here",
+                        style = SoftType.meta
+                    )
+                }
+            }
+        }
+    }
+
+    // ── Reviews you've written ─────────────────────────────────────────────────
+    if (state.dashboardState.reviewsByMe.isNotEmpty()) {
+        SectionHead(title = "Reviews you wrote")
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            state.dashboardState.reviewsByMe.forEach { review ->
+                ReviewListCard(review = review, showStudent = false)
+            }
+        }
+    }
+
+    // ── Report a tutor ────────────────────────────────────────────────────────
+    ReportSection(
+        state = state,
+        onClearMessages = onClearMessages,
+        onReportTutorChanged = onReportTutorChanged,
+        onReportReasonChanged = onReportReasonChanged,
+        onReportDetailsChanged = onReportDetailsChanged,
+        onSubmitReport = onSubmitReport
+    )
+}
+
+// ─── TUTOR branch ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun TutorReviewsContent(state: SmartCampusUiState) {
+    val reviews = state.dashboardState.reviewsForMe
+
+    if (reviews.isEmpty()) {
+        CardFlat {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Primary50),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = SoftIcons.star,
+                        contentDescription = null,
+                        tint = Primary600,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Text(
+                    text = "No reviews yet",
+                    style = SoftType.h3,
+                    color = InkToken
+                )
+                Text(
+                    text = "When a student rates a lesson,\nit shows up here.",
+                    style = SoftType.body,
+                    color = Ink3,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
+        return
+    }
+
+    // ── Summary card ─────────────────────────────────────────────────────────
+    val avg = reviews.map { it.rating }.average().toFloat()
+    val avgStr = String.format("%.1f", avg)
+    val maxCount = listOf(5, 4, 3, 2, 1)
+        .maxOf { star -> reviews.count { it.rating == star } }
+        .coerceAtLeast(1)
+
+    SoftCard {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Big number + stars + count
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.width(80.dp)
+            ) {
+                Text(
+                    text = avgStr,
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 40.sp,
+                        color = InkToken
+                    )
+                )
+                StarsRow(value = avg, size = StarSize.Sm)
+                Text(
+                    text = "${reviews.size} reviews",
+                    style = SoftType.meta
+                )
+            }
+
+            // Distribution bars
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(5, 4, 3, 2, 1).forEach { star ->
+                    val count = reviews.count { it.rating == star }
+                    val fraction = count.toFloat() / maxCount.toFloat()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "$star",
+                            style = SoftType.meta,
+                            modifier = Modifier.width(10.dp)
+                        )
+                        ProgressBar(
+                            fraction = fraction,
+                            height = 6.dp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "$count",
+                            style = SoftType.meta,
+                            modifier = Modifier.width(22.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Top tags derived from comments ────────────────────────────────────────
+    val tagCounts = WELL_TAGS
+        .map { tag -> tag to reviews.count { it.comment.contains(tag, ignoreCase = true) } }
+        .filter { (_, count) -> count > 0 }
+        .sortedByDescending { (_, count) -> count }
+
+    if (tagCounts.isNotEmpty()) {
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            tagCounts.take(6).forEach { (tag, count) ->
+                Badge(text = "$tag · $count", tone = BadgeTone.Prim)
+            }
+        }
+    }
+
+    // ── Recent reviews ────────────────────────────────────────────────────────
+    SectionHead(title = "Recent")
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        reviews.forEach { review ->
+            ReviewListCard(review = review, showStudent = true)
         }
     }
 }
 
+// ─── Shared components ────────────────────────────────────────────────────────
+
 @Composable
-private fun StarRatingInput(rating: Int, onRatingChanged: (Int) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun InteractiveStarsRow(rating: Int, onRatingChanged: (Int) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         (1..5).forEach { index ->
             Icon(
-                imageVector = if (index <= rating) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                imageVector = if (index <= rating) SoftIcons.star else SoftIcons.starO,
                 contentDescription = "$index stars",
-                tint = if (index <= rating) ClayAccent else InkTextSoft.copy(alpha = 0.4f),
+                tint = if (index <= rating) Star else Ink4,
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(50))
+                    .size(38.dp)
+                    .clip(CircleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { onRatingChanged(index) }
-                    )
+                        indication = ripple(color = Star, bounded = false)
+                    ) { onRatingChanged(index) }
             )
         }
+    }
+}
+
+private val WELL_TAGS = listOf(
+    "Clear explanations", "Patient", "On time",
+    "Great materials", "Well prepared", "Good pace"
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WentWellTags(comment: String, onCommentChanged: (String) -> Unit) {
+    // Track which tags are currently embedded in the comment
+    var selectedTags by remember { mutableStateOf(setOf<String>()) }
+
+    SoftCard {
         Text(
-            "$rating/5",
-            color = InkTextSoft,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 4.dp)
+            text = "WHAT WENT WELL?",
+            style = SoftType.eyebrow,
+            modifier = Modifier.padding(bottom = 10.dp)
         )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            WELL_TAGS.forEach { tag ->
+                val isSelected = tag in selectedTags
+                Chip(
+                    text = tag,
+                    selected = isSelected,
+                    leadingIcon = if (isSelected) SoftIcons.check else null,
+                    onClick = {
+                        val newSelected = if (isSelected) {
+                            selectedTags - tag
+                        } else {
+                            selectedTags + tag
+                        }
+                        selectedTags = newSelected
+                        // Fold tags into comment: keep free-text after a separator
+                        val freeText = comment
+                            .split("\n---\n")
+                            .lastOrNull()
+                            .orEmpty()
+                            .trim()
+                        val tagPart = newSelected.joinToString(", ")
+                        onCommentChanged(
+                            if (tagPart.isNotEmpty() && freeText.isNotEmpty()) "$tagPart\n---\n$freeText"
+                            else if (tagPart.isNotEmpty()) tagPart
+                            else freeText
+                        )
+                    }
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun LessonChoiceRow(
+private fun ReviewListCard(review: TutorReviewUi, showStudent: Boolean) {
+    val name = if (showStudent) review.studentDisplayName else review.tutorDisplayName
+    val subject = review.subject.ifBlank { "General" }
+    val (subjBg, subjFg) = subjectColors(subject)
+
+    CardQ(padding = 14.dp) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                InitialsAvatar(name = name, size = 34.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = name,
+                        style = SoftType.title,
+                        color = InkToken,
+                        fontSize = 13.5.sp
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = subject,
+                            style = TextStyle(
+                                fontFamily = BodyFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = subjFg
+                            )
+                        )
+                        Text(
+                            text = "·",
+                            style = SoftType.meta
+                        )
+                        Text(
+                            text = review.createdAtLabel,
+                            style = SoftType.meta
+                        )
+                    }
+                }
+            }
+            StarsRow(
+                value = review.rating.toFloat(),
+                size = StarSize.Sm
+            )
+        }
+        if (review.comment.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = review.comment,
+                style = SoftType.bodySm,
+                color = Ink2
+            )
+        }
+    }
+}
+
+@Composable
+private fun LessonPickRow(
     lesson: LessonBookingUi,
     selected: Boolean,
     onSelect: () -> Unit
 ) {
+    val borderColor = if (selected) Primary else Line
+    val bgColor = if (selected) Primary50 else CardSurface
+    val (subjBg, subjFg) = subjectColors(lesson.subject)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(if (selected) PwrNavy.copy(alpha = 0.08f) else androidx.compose.ui.graphics.Color.Transparent)
-            .border(1.dp, if (selected) PwrNavy else PaperLine, RoundedCornerShape(16.dp))
-            .clickable(onClick = onSelect)
+            .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(color = Primary)
+            ) { onSelect() }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(lesson.subject, color = InkText, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text("${lesson.tutorDisplayName} · ${lesson.dateLabel} · ${lesson.timeLabel}", color = InkTextSoft, style = MaterialTheme.typography.bodySmall)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(subjBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = SoftIcons.cap,
+                    contentDescription = null,
+                    tint = subjFg,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = lesson.subject,
+                    style = SoftType.title,
+                    color = InkToken
+                )
+                Text(
+                    text = "${lesson.tutorDisplayName} · ${lesson.dateLabel} · ${lesson.timeLabel}",
+                    style = SoftType.meta
+                )
+            }
         }
         if (selected) {
-            Icon(Icons.Rounded.Star, contentDescription = null, tint = ClayAccent, modifier = Modifier.size(18.dp))
+            Icon(
+                imageVector = SoftIcons.check,
+                contentDescription = null,
+                tint = Primary,
+                modifier = Modifier.size(18.dp)
+            )
         } else {
-            MonoLabel("Select", color = PwrNavy, fontSize = 10.sp)
+            Text(
+                text = "Select",
+                style = TextStyle(
+                    fontFamily = BodyFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.5.sp,
+                    color = Primary600
+                )
+            )
         }
     }
 }
 
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
-        color = TextPrimary,
-        fontWeight = FontWeight.SemiBold
-    )
+private fun AnonTogglePlaceholder() {
+    // DESIGN-PLACEHOLDER: no anon field in the data model — visual only
+    Box(
+        modifier = Modifier
+            .width(44.dp)
+            .height(26.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Bg2),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(start = 3.dp)
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(White)
+        )
+    }
 }
 
+// ─── Report section ───────────────────────────────────────────────────────────
+
 @Composable
-private fun EmptyHint(text: String) {
-    EditorialCard {
-        Text(text, color = InkTextSoft, style = MaterialTheme.typography.bodyMedium)
+private fun ReportSection(
+    state: SmartCampusUiState,
+    onClearMessages: () -> Unit,
+    onReportTutorChanged: (String) -> Unit,
+    onReportReasonChanged: (String) -> Unit,
+    onReportDetailsChanged: (String) -> Unit,
+    onSubmitReport: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    // Entry point — collapsed by default to keep the happy path clean
+    CardFlat {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { expanded = !expanded },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(RedBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = SoftIcons.flag,
+                        contentDescription = null,
+                        tint = Red,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = "Report a tutor",
+                        style = SoftType.title,
+                        color = InkToken
+                    )
+                    Text(
+                        text = "For serious issues only",
+                        style = SoftType.meta
+                    )
+                }
+            }
+            Icon(
+                imageVector = if (expanded) SoftIcons.x else SoftIcons.chev,
+                contentDescription = null,
+                tint = Ink3,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        if (expanded) {
+            Spacer(Modifier.height(14.dp))
+            SoftDivider()
+            Spacer(Modifier.height(14.dp))
+
+            Text(
+                text = "Use this only for serious issues. Reports go to the admin team.",
+                style = SoftType.meta,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+
+            TutorPicker(
+                tutors = state.dashboardState.tutors,
+                selected = state.reportForm.tutorUid,
+                onPick = onReportTutorChanged
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            SoftTextField(
+                value = state.reportForm.reason,
+                onValueChange = onReportReasonChanged,
+                label = "Reason",
+                placeholder = "e.g. inappropriate behaviour",
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            SoftTextField(
+                value = state.reportForm.details,
+                onValueChange = onReportDetailsChanged,
+                label = "Details",
+                placeholder = "Describe what happened…",
+                singleLine = false,
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            SoftButton(
+                text = "Send report",
+                onClick = { onClearMessages(); onSubmitReport() },
+                enabled = state.reportForm.tutorUid.isNotBlank() && state.reportForm.reason.isNotBlank(),
+                variant = SoftButtonVariant.Danger,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
+
+    // ── Reports you sent ──────────────────────────────────────────────────────
+    if (state.dashboardState.reportsByMe.isNotEmpty()) {
+        SectionHead(title = "Reports you sent")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val open = state.dashboardState.reportsByMe.count { it.status == "open" }
+            val resolved = state.dashboardState.reportsByMe.count { it.status == "resolved" }
+            val dismissed = state.dashboardState.reportsByMe.count { it.status == "dismissed" }
+            if (open > 0) Badge(text = "open $open", tone = BadgeTone.Amber)
+            if (resolved > 0) Badge(text = "resolved $resolved", tone = BadgeTone.Green)
+            if (dismissed > 0) Badge(text = "dismissed $dismissed", tone = BadgeTone.Gray)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            state.dashboardState.reportsByMe.forEach { report ->
+                CardQ(padding = 14.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                text = report.tutorDisplayName,
+                                style = SoftType.title,
+                                color = InkToken
+                            )
+                            Text(
+                                text = report.reason,
+                                style = SoftType.bodySm,
+                                color = Ink2
+                            )
+                            Text(
+                                text = report.createdAtLabel,
+                                style = SoftType.meta
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        when (report.status) {
+                            "resolved" -> Badge(text = "Resolved", tone = BadgeTone.Green)
+                            "dismissed" -> Badge(text = "Dismissed", tone = BadgeTone.Gray)
+                            else -> Badge(text = "Open", tone = BadgeTone.Amber)
+                        }
+                    }
+                    if (report.details.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = report.details,
+                            style = SoftType.meta,
+                            color = Ink3
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+private fun ratingLabel(rating: Int): String = when (rating) {
+    5 -> "Excellent"
+    4 -> "Very good"
+    3 -> "Good"
+    2 -> "Fair"
+    else -> "Poor"
+}
+
+private fun reviewableLessons(state: SmartCampusUiState): List<LessonBookingUi> {
+    val reviewedBookingIds = state.dashboardState.reviewsByMe
+        .mapNotNull { it.bookingId.ifBlank { null } }
+        .toSet()
+    return state.dashboardState.myStudentBookings
+        .filter { it.id !in reviewedBookingIds && it.canBeReviewedAfterLesson() }
 }
 
 private fun LessonBookingUi.canBeReviewedAfterLesson(): Boolean {
