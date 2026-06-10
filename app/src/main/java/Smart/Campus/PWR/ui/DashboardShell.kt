@@ -15,6 +15,35 @@ import Smart.Campus.PWR.ui.components.ReportCard
 import Smart.Campus.PWR.ui.components.RoleCheck
 import Smart.Campus.PWR.ui.components.SectionCard
 import Smart.Campus.PWR.ui.components.TimePickerDialogWrapper
+import Smart.Campus.PWR.ui.components.softindigo.Badge
+import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
+import Smart.Campus.PWR.ui.components.softindigo.CardQ
+import Smart.Campus.PWR.ui.components.softindigo.Chip
+import Smart.Campus.PWR.ui.components.softindigo.SearchField
+import Smart.Campus.PWR.ui.components.softindigo.SectionHead
+import Smart.Campus.PWR.ui.components.softindigo.SoftButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
+import Smart.Campus.PWR.ui.components.softindigo.SoftCard
+import Smart.Campus.PWR.ui.components.softindigo.SoftDivider
+import Smart.Campus.PWR.ui.components.softindigo.SoftIconButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftTextField
+import Smart.Campus.PWR.ui.components.softindigo.SoftTopBar
+import Smart.Campus.PWR.ui.icons.SoftIcons
+import Smart.Campus.PWR.ui.theme.Amber
+import Smart.Campus.PWR.ui.theme.Bg
+import Smart.Campus.PWR.ui.theme.Bg2
+import Smart.Campus.PWR.ui.theme.CardSurface
+import Smart.Campus.PWR.ui.theme.Green
+import Smart.Campus.PWR.ui.theme.Ink2
+import Smart.Campus.PWR.ui.theme.Ink3
+import Smart.Campus.PWR.ui.theme.InkToken
+import Smart.Campus.PWR.ui.theme.Line
+import Smart.Campus.PWR.ui.theme.Primary
+import Smart.Campus.PWR.ui.theme.Primary100
+import Smart.Campus.PWR.ui.theme.Red
+import Smart.Campus.PWR.ui.theme.RedBg
+import Smart.Campus.PWR.ui.theme.SoftType
+import Smart.Campus.PWR.ui.theme.White
 import Smart.Campus.PWR.ui.screens.AssignmentsTab
 import Smart.Campus.PWR.ui.screens.CalendarTab
 import Smart.Campus.PWR.ui.screens.ChatTab
@@ -40,12 +69,16 @@ import Smart.Campus.PWR.ui.theme.PwrRed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
@@ -349,6 +382,10 @@ fun AdminShellScreen(
     onClearMessages: () -> Unit
 ) {
     var editingSlot by remember { mutableStateOf<TutorAvailabilityUi?>(null) }
+    var reportFilter by remember { mutableStateOf("Open") }
+    var userQuery by remember { mutableStateOf("") }
+    var userRoleFilter by remember { mutableStateOf("All") }
+    var showCreateUser by remember { mutableStateOf(false) }
 
     editingSlot?.let { slot ->
         EditSlotDialog(
@@ -361,36 +398,106 @@ fun AdminShellScreen(
         )
     }
 
+    // Derive stat counts from adminReports
+    val openCount = state.dashboardState.adminReports.count { it.status == "open" }
+    val inReviewCount = state.dashboardState.adminReports.count { it.status == "in-review" || it.status == "in_review" }
+    val resolvedCount = state.dashboardState.adminReports.count { it.status == "resolved" || it.status == "dismissed" }
+
+    // Filtered reports
+    val visibleReports = state.dashboardState.adminReports.filter { report ->
+        when (reportFilter) {
+            "Open"      -> report.status == "open"
+            "In review" -> report.status == "in-review" || report.status == "in_review"
+            "Resolved"  -> report.status == "resolved" || report.status == "dismissed"
+            else        -> true
+        }
+    }
+
+    // Filtered users
+    val visibleUsers = state.adminUsers.filter { user ->
+        val matchesQuery = userQuery.isBlank() ||
+            user.displayName.contains(userQuery, ignoreCase = true) ||
+            user.login.contains(userQuery, ignoreCase = true)
+        val matchesRole = when (userRoleFilter) {
+            "Students" -> user.hasRole(UserRole.STUDENT)
+            "Tutors"   -> user.hasRole(UserRole.TUTOR)
+            "Admins"   -> user.hasRole(UserRole.ADMIN)
+            else       -> true
+        }
+        matchesQuery && matchesRole
+    }
+
     MainList {
-        EditorialTopBar(
-            brand = "ADMIN REPORTS",
-            right = {
-                Icon(Icons.Rounded.Shield, contentDescription = null, tint = InkTextSoft)
-                Icon(Icons.Rounded.Tune, contentDescription = null, tint = InkTextSoft)
+        // ─── MODERATION TOP BAR ─────────────────────────────────────────────
+        SoftTopBar(
+            leading = {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(InkToken, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(SoftIcons.shield, contentDescription = null, tint = White, modifier = Modifier.size(19.dp))
+                }
+            },
+            title = "Moderation",
+            subtitle = "Smart Campus PWR · admin",
+            actions = {
+                SoftIconButton(icon = SoftIcons.filter, onClick = { /* filter — DESIGN-PLACEHOLDER: future filter sheet */ })
+                SoftIconButton(
+                    icon = SoftIcons.repeat,
+                    onClick = { onClearMessages(); onRefresh() }
+                )
             }
         )
 
-        SectionCard("Moderation queue") {
-            Text("Smart Campus PWR admin", color = InkTextSoft, style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppPrimaryButton(
-                    text = "Refresh",
-                    onClick = { onClearMessages(); onRefresh() },
-                    leadingIcon = { Icon(Icons.Rounded.Refresh, contentDescription = null, tint = AppSurface) }
-                )
-                AppDangerButton("Sign out", onClick = onLogout)
+        MessageBlock(state.errorMessage, state.infoMessage)
+
+        // ─── STAT BAND ──────────────────────────────────────────────────────
+        CardQ(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                listOf(
+                    Triple(openCount.toString(),     "Open",      Red),
+                    Triple(inReviewCount.toString(), "In review", Amber),
+                    Triple(resolvedCount.toString(), "Resolved",  Green)
+                ).forEachIndexed { idx, (count, label, color) ->
+                    if (idx > 0) {
+                        Box(modifier = Modifier.width(1.dp).height(48.dp).background(Line))
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(count, style = SoftType.h2, color = color)
+                        Spacer(Modifier.height(2.dp))
+                        Text(label, style = SoftType.meta)
+                    }
+                }
             }
         }
 
-        MessageBlock(state.errorMessage, state.infoMessage)
+        // ─── FILTER CHIPS ───────────────────────────────────────────────────
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Open", "In review", "Resolved").forEach { filter ->
+                Chip(
+                    text = filter,
+                    selected = reportFilter == filter,
+                    onClick = { reportFilter = filter }
+                )
+            }
+        }
 
-        Text("Reports".uppercase(), color = InkText, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-        if (state.dashboardState.adminReports.isEmpty()) {
-            SectionCard("No open reports") {
-                Text("The queue is clear. New tutoring reports will appear here for triage.", color = InkTextSoft)
+        // ─── REPORT CARDS ───────────────────────────────────────────────────
+        if (visibleReports.isEmpty()) {
+            CardQ(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "No reports in this category.",
+                    style = SoftType.body,
+                    color = Ink3
+                )
             }
         } else {
-            state.dashboardState.adminReports.forEach { report ->
+            visibleReports.forEach { report ->
                 ReportCard(
                     report = report,
                     onStatusChange = onUpdateReportStatus
@@ -398,10 +505,13 @@ fun AdminShellScreen(
             }
         }
 
-        SectionCard("All tutoring slots") {
-            if (state.dashboardState.availableTutorSlots.isEmpty()) {
-                Text("No slots found.", color = InkTextSoft)
+        // ─── ALL TUTORING SLOTS ─────────────────────────────────────────────
+        SectionHead(title = "Tutoring slots", action = if (state.dashboardState.availableTutorSlots.isEmpty()) null else "${state.dashboardState.availableTutorSlots.size}")
+        if (state.dashboardState.availableTutorSlots.isEmpty()) {
+            CardQ(modifier = Modifier.fillMaxWidth()) {
+                Text("No slots found.", style = SoftType.body, color = Ink3)
             }
+        } else {
             state.dashboardState.availableTutorSlots.forEach { slot ->
                 AvailabilityCard(
                     slot = slot,
@@ -412,29 +522,128 @@ fun AdminShellScreen(
             }
         }
 
-        SectionCard("Add user") {
-            OutlinedTextField(state.createUserForm.login, onCreateLoginChanged, label = { Text("Login") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(state.createUserForm.password, onCreatePasswordChanged, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(state.createUserForm.displayName, onCreateDisplayNameChanged, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
-            RoleCheck("Admin", state.createUserForm.admin, onCreateAdminChecked)
-            RoleCheck("Student", state.createUserForm.student, onCreateStudentChecked)
-            RoleCheck("Tutor", state.createUserForm.tutor, onCreateTutorChecked)
-            AppPrimaryButton(onClick = { onClearMessages(); onCreateUserClick() }, text = "Create user")
+        // ─── USERS TOP BAR ──────────────────────────────────────────────────
+        SoftTopBar(
+            modifier = Modifier.padding(top = 8.dp),
+            leading = {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(InkToken, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(SoftIcons.user, contentDescription = null, tint = White, modifier = Modifier.size(19.dp))
+                }
+            },
+            title = "Users",
+            subtitle = "${state.adminUsers.size} accounts",
+            actions = {
+                SoftIconButton(
+                    icon = SoftIcons.plus,
+                    prim = true,
+                    onClick = { showCreateUser = !showCreateUser }
+                )
+            }
+        )
+
+        // ─── USER SEARCH + ROLE FILTERS ─────────────────────────────────────
+        SearchField(
+            value = userQuery,
+            onValueChange = { userQuery = it },
+            placeholder = "Search by name or login…",
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("All", "Students", "Tutors", "Admins").forEach { role ->
+                Chip(
+                    text = role,
+                    selected = userRoleFilter == role,
+                    onClick = { userRoleFilter = role }
+                )
+            }
         }
 
-        Text("Users".uppercase(), color = InkText, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-        if (state.adminUsers.isEmpty()) {
-            Text("No users.", color = InkTextSoft)
+        // ─── USER LIST ──────────────────────────────────────────────────────
+        if (visibleUsers.isEmpty()) {
+            CardQ(modifier = Modifier.fillMaxWidth()) {
+                Text("No users match.", style = SoftType.body, color = Ink3)
+            }
+        } else {
+            CardQ(modifier = Modifier.fillMaxWidth(), padding = 6.dp) {
+                visibleUsers.forEachIndexed { idx, user ->
+                    AdminUserCard(
+                        user = user,
+                        inspector = state.adminInspectors[user.uid],
+                        onUpdateUserRoles = onUpdateUserRoles,
+                        onToggleInspector = onToggleInspector,
+                        onDeleteUser = onDeleteUser
+                    )
+                    if (idx < visibleUsers.lastIndex) {
+                        SoftDivider()
+                    }
+                }
+            }
         }
-        state.adminUsers.forEach { user ->
-            AdminUserCard(
-                user = user,
-                inspector = state.adminInspectors[user.uid],
-                onUpdateUserRoles = onUpdateUserRoles,
-                onToggleInspector = onToggleInspector,
-                onDeleteUser = onDeleteUser
-            )
+
+        // ─── CREATE USER FORM (collapsible) ─────────────────────────────────
+        if (showCreateUser) {
+            SoftCard(modifier = Modifier.fillMaxWidth()) {
+                SectionHead(title = "Create new user")
+                Spacer(Modifier.height(12.dp))
+                SoftTextField(
+                    value = state.createUserForm.login,
+                    onValueChange = onCreateLoginChanged,
+                    label = "Login",
+                    placeholder = "login",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                SoftTextField(
+                    value = state.createUserForm.password,
+                    onValueChange = onCreatePasswordChanged,
+                    label = "Password",
+                    placeholder = "••••••••",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                SoftTextField(
+                    value = state.createUserForm.displayName,
+                    onValueChange = onCreateDisplayNameChanged,
+                    label = "Display name",
+                    placeholder = "Full name",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RoleCheck("Admin",   state.createUserForm.admin,   onCreateAdminChecked)
+                    RoleCheck("Student", state.createUserForm.student, onCreateStudentChecked)
+                    RoleCheck("Tutor",   state.createUserForm.tutor,   onCreateTutorChecked)
+                }
+                Spacer(Modifier.height(12.dp))
+                SoftButton(
+                    text = "Create user",
+                    onClick = { onClearMessages(); onCreateUserClick() },
+                    leadingIcon = SoftIcons.plus,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
+
+        // ─── BOTTOM CREATE BUTTON ────────────────────────────────────────────
+        SoftButton(
+            text = "Create new user",
+            onClick = { showCreateUser = !showCreateUser },
+            leadingIcon = SoftIcons.plus,
+            variant = if (showCreateUser) SoftButtonVariant.Soft else SoftButtonVariant.Primary,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(8.dp))
+        SoftButton(
+            text = "Sign out",
+            onClick = onLogout,
+            variant = SoftButtonVariant.Ghost,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

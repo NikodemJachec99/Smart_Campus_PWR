@@ -2,25 +2,46 @@ package Smart.Campus.PWR.ui.components
 
 import Smart.Campus.PWR.auth.AppUser
 import Smart.Campus.PWR.auth.UserRole
+import Smart.Campus.PWR.ui.components.softindigo.Badge
+import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
+import Smart.Campus.PWR.ui.components.softindigo.CardQ
+import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
+import Smart.Campus.PWR.ui.components.softindigo.SoftButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonSize
+import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
+import Smart.Campus.PWR.ui.components.softindigo.SoftCard
+import Smart.Campus.PWR.ui.components.softindigo.SoftDivider
+import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.ui.state.AdminUserInspectorUi
 import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.TutorAvailabilityUi
 import Smart.Campus.PWR.ui.state.TutorReportUi
 import Smart.Campus.PWR.ui.state.TutorReviewUi
 import Smart.Campus.PWR.ui.state.TutorSummaryUi
+import Smart.Campus.PWR.ui.theme.Amber
+import Smart.Campus.PWR.ui.theme.Bg
+import Smart.Campus.PWR.ui.theme.BodyFontFamily
 import Smart.Campus.PWR.ui.theme.Cloud
 import Smart.Campus.PWR.ui.theme.Hairline
 import Smart.Campus.PWR.ui.theme.HairlineStrong
+import Smart.Campus.PWR.ui.theme.Ink2
+import Smart.Campus.PWR.ui.theme.Ink3
 import Smart.Campus.PWR.ui.theme.InkText
 import Smart.Campus.PWR.ui.theme.InkTextSoft
+import Smart.Campus.PWR.ui.theme.Line
 import Smart.Campus.PWR.ui.theme.Mist
+import Smart.Campus.PWR.ui.theme.Primary600
 import Smart.Campus.PWR.ui.theme.PwrBlue
 import Smart.Campus.PWR.ui.theme.PwrBlueSoft
 import Smart.Campus.PWR.ui.theme.PwrBlueWhisper
 import Smart.Campus.PWR.ui.theme.PwrNavy
+import Smart.Campus.PWR.ui.theme.PwrRed
+import Smart.Campus.PWR.ui.theme.Red
+import Smart.Campus.PWR.ui.theme.SoftType
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +51,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccessTime
@@ -48,6 +70,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +80,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -172,7 +196,7 @@ fun AvailabilityCard(
                     }
                     if (onDelete != null && !slot.isBooked) {
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Rounded.Delete, contentDescription = "Delete slot", tint = Smart.Campus.PWR.ui.theme.PwrRed, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Rounded.Delete, contentDescription = "Delete slot", tint = PwrRed, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -346,7 +370,14 @@ private fun ConfirmDangerDialog(
 }
 
 @Composable
-fun ReviewCard(review: TutorReviewUi) {
+fun ReviewCard(review: TutorReviewUi, perspective: UserRole = UserRole.STUDENT) {
+    val title = if (perspective == UserRole.TUTOR) review.studentDisplayName else review.tutorDisplayName
+    val subtitle = if (perspective == UserRole.TUTOR) {
+        "Student review"
+    } else {
+        "Tutor review"
+    }
+
     PlainCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -354,7 +385,7 @@ fun ReviewCard(review: TutorReviewUi) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                review.tutorDisplayName,
+                title.ifBlank { review.tutorDisplayName },
                 style = MaterialTheme.typography.titleMedium,
                 color = InkText,
                 fontWeight = FontWeight.SemiBold
@@ -363,12 +394,12 @@ fun ReviewCard(review: TutorReviewUi) {
         }
         if (review.reviewType == "lesson" && review.subject.isNotBlank()) {
             Text(
-                "${review.subject} · ${review.lessonDateLabel} · ${review.lessonTimeLabel}",
+                "$subtitle · ${review.subject} · ${review.lessonDateLabel} · ${review.lessonTimeLabel}",
                 style = MaterialTheme.typography.bodySmall,
                 color = InkTextSoft
             )
         } else {
-            Text("General tutor review", style = MaterialTheme.typography.bodySmall, color = InkTextSoft)
+            Text("General $subtitle", style = MaterialTheme.typography.bodySmall, color = InkTextSoft)
         }
         Text(review.comment, style = MaterialTheme.typography.bodyMedium, color = InkText)
         Text(review.createdAtLabel, color = InkTextSoft, style = MaterialTheme.typography.bodySmall)
@@ -380,37 +411,150 @@ fun ReportCard(
     report: TutorReportUi,
     onStatusChange: ((String, String) -> Unit)? = null
 ) {
-    PlainCard {
+    val severityBadgeTone = when (report.status) {
+        "open"        -> BadgeTone.Red
+        "in-review", "in_review" -> BadgeTone.Amber
+        "resolved"    -> BadgeTone.Green
+        "dismissed"   -> BadgeTone.Gray
+        else          -> BadgeTone.Amber
+    }
+    val severityLabel = when (report.status) {
+        "open"        -> "Open"
+        "in-review", "in_review" -> "In review"
+        "resolved"    -> "Resolved"
+        "dismissed"   -> "Dismissed"
+        else          -> report.status.replaceFirstChar { it.uppercase() }
+    }
+
+    val canAct = onStatusChange != null && (report.status == "open" || report.status == "in-review" || report.status == "in_review")
+
+    SoftCard(modifier = Modifier.fillMaxWidth()) {
+        // Header row: report id + severity badge
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                report.reason,
-                style = MaterialTheme.typography.titleMedium,
-                color = InkText,
-                fontWeight = FontWeight.SemiBold
+                text = "Report #${report.id.takeLast(4).uppercase()}",
+                style = SoftType.meta,
+                color = Ink3
             )
-            StatusChip(report.status, Color.Transparent, PwrNavy)
+            Badge(text = severityLabel, tone = severityBadgeTone)
         }
-        Text("Tutor · ${report.tutorDisplayName}", color = InkTextSoft, style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(6.dp))
+        // Reason heading
+        Text(report.reason, style = SoftType.h3, color = InkText)
+        Text(report.createdAtLabel, style = SoftType.meta, color = Ink3)
+        Spacer(Modifier.height(10.dp))
+        SoftDivider()
+        Spacer(Modifier.height(10.dp))
+        // Tutor | Reporter split row
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "TUTOR",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp,
+                        letterSpacing = 0.8.sp,
+                        color = Ink3
+                    )
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InitialsAvatar(name = report.tutorDisplayName, size = 26.dp)
+                    Text(report.tutorDisplayName, style = SoftType.title, color = InkText)
+                }
+            }
+            Box(modifier = Modifier.width(1.dp).height(40.dp).background(Line))
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "REPORTER",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp,
+                        letterSpacing = 0.8.sp,
+                        color = Ink3
+                    )
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InitialsAvatar(name = report.studentDisplayName.ifBlank { "?" }, size = 26.dp)
+                    Text(
+                        report.studentDisplayName.ifBlank { "Anonymous" },
+                        style = SoftType.title,
+                        color = InkText
+                    )
+                }
+            }
+        }
+        // Details quote block
         if (report.details.isNotBlank()) {
-            Text(report.details, style = MaterialTheme.typography.bodyMedium, color = InkText)
+            Spacer(Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Bg)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "“${report.details}”",
+                    style = SoftType.bodySm,
+                    color = Ink2
+                )
+            }
         }
-        Text(report.createdAtLabel, color = InkTextSoft, style = MaterialTheme.typography.bodySmall)
-        if (onStatusChange != null && report.status == "open") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppPrimaryButton(
-                    text = "Resolve",
-                    modifier = Modifier.weight(1f),
-                    onClick = { onStatusChange(report.id, "resolved") }
-                )
-                AppDangerButton(
-                    text = "Dismiss",
-                    modifier = Modifier.weight(1f),
-                    onClick = { onStatusChange(report.id, "dismissed") }
-                )
+        // Action buttons
+        if (canAct && onStatusChange != null) {
+            Spacer(Modifier.height(10.dp))
+            SoftDivider()
+            Row(modifier = Modifier.fillMaxWidth()) {
+                // Dismiss ghost button
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(color = Ink3)
+                        ) { onStatusChange(report.id, "dismissed") }
+                        .padding(vertical = 13.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Dismiss",
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Ink3
+                        )
+                    )
+                }
+                Box(modifier = Modifier.width(1.dp).height(46.dp).background(Line))
+                // Investigate button
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(color = Primary600)
+                        ) { onStatusChange(report.id, "in-review") }
+                        .padding(vertical = 13.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Investigate →",
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Primary600
+                        )
+                    )
+                }
             }
         }
     }
@@ -471,6 +615,7 @@ fun AdminUserCard(
     var student by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.STUDENT)) }
     var tutor by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.TUTOR)) }
     var showDeleteDialog by remember(user.uid) { mutableStateOf(false) }
+    var expanded by remember(user.uid) { mutableStateOf(false) }
 
     if (showDeleteDialog && onDeleteUser != null) {
         ConfirmDangerDialog(
@@ -485,45 +630,109 @@ fun AdminUserCard(
         )
     }
 
-    SectionCard(user.displayName) {
-        Text("${user.login} · ${user.email}", color = InkTextSoft, style = MaterialTheme.typography.bodySmall)
-        Text("Roles · ${user.roles.joinToString { it.displayName }}", color = InkTextSoft, style = MaterialTheme.typography.bodySmall)
-        if (!user.hasRole(UserRole.ADMIN)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    student,
-                    { student = it },
-                    colors = CheckboxDefaults.colors(checkedColor = PwrNavy, uncheckedColor = HairlineStrong, checkmarkColor = Cloud)
-                )
-                Text("Student", color = InkText)
-                Spacer(Modifier.size(8.dp))
-                Checkbox(
-                    tutor,
-                    { tutor = it },
-                    colors = CheckboxDefaults.colors(checkedColor = PwrNavy, uncheckedColor = HairlineStrong, checkmarkColor = Cloud)
-                )
-                Text("Tutor", color = InkText)
-                Spacer(Modifier.size(8.dp))
-                AppPrimaryButton("Save", onClick = { onUpdateUserRoles(user.uid, student, tutor) })
+    // Compact user row — matches ScreenAdminUsers design
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(color = InkText)
+                ) { expanded = !expanded }
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            InitialsAvatar(name = user.displayName, size = 42.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(user.displayName, style = SoftType.title, color = InkText)
+                Text("@${user.login}", style = SoftType.meta, color = Ink3)
             }
-        }
-        AppPrimaryButton(
-            if (inspector == null) "Inspect user" else "Hide details",
-            onClick = { onToggleInspector(user.uid) }
-        )
-        if (onDeleteUser != null && !user.hasRole(UserRole.ADMIN)) {
-            AppDangerButton("Delete user", onClick = { showDeleteDialog = true })
-        }
-        if (inspector != null) {
-            if (inspector.isLoading) {
-                Text("Loading…", color = InkTextSoft)
-            } else {
-                InspectorSection("Availability", inspector.availability.map { "· ${it.dateLabel} ${it.timeLabel} — ${it.subject}" })
-                InspectorSection("Bookings as tutor", inspector.bookingsAsTutor.map { "· ${it.dateLabel} ${it.timeLabel} — ${it.subject}" })
-                InspectorSection("Bookings as student", inspector.bookingsAsStudent.map { "· ${it.dateLabel} ${it.timeLabel} — ${it.subject}" })
-                InspectorSection("Reviews received", inspector.reviewsReceived.map { "· ${it.rating}/5 ${it.studentDisplayName} — ${it.comment}" })
-                InspectorSection("Reports received", inspector.reportsReceived.map { "· ${it.reason} — ${it.status}" })
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                user.roles.forEach { role ->
+                    val tone = when (role) {
+                        UserRole.ADMIN   -> BadgeTone.Red
+                        UserRole.TUTOR   -> BadgeTone.Prim
+                        UserRole.STUDENT -> BadgeTone.Green
+                    }
+                    Badge(text = role.displayName, tone = tone)
+                }
             }
+            // More / expand indicator
+            Icon(
+                imageVector = SoftIcons.more,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = Ink3,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        // Expanded controls
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Bg)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("${user.email}", style = SoftType.meta, color = Ink3)
+                if (!user.hasRole(UserRole.ADMIN)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            student,
+                            { student = it },
+                            colors = CheckboxDefaults.colors(checkedColor = PwrNavy, uncheckedColor = HairlineStrong, checkmarkColor = Cloud)
+                        )
+                        Text("Student", color = InkText, style = SoftType.body)
+                        Spacer(Modifier.width(8.dp))
+                        Checkbox(
+                            tutor,
+                            { tutor = it },
+                            colors = CheckboxDefaults.colors(checkedColor = PwrNavy, uncheckedColor = HairlineStrong, checkmarkColor = Cloud)
+                        )
+                        Text("Tutor", color = InkText, style = SoftType.body)
+                        Spacer(Modifier.weight(1f))
+                        SoftButton(
+                            text = "Save",
+                            onClick = { onUpdateUserRoles(user.uid, student, tutor) },
+                            variant = SoftButtonVariant.Soft,
+                            size = SoftButtonSize.Sm
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SoftButton(
+                        text = if (inspector == null) "Inspect" else "Hide",
+                        onClick = { onToggleInspector(user.uid) },
+                        variant = SoftButtonVariant.Outline,
+                        size = SoftButtonSize.Sm,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (onDeleteUser != null && !user.hasRole(UserRole.ADMIN)) {
+                        SoftButton(
+                            text = "Delete",
+                            onClick = { showDeleteDialog = true },
+                            variant = SoftButtonVariant.Danger,
+                            size = SoftButtonSize.Sm,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                if (inspector != null) {
+                    if (inspector.isLoading) {
+                        Text("Loading…", color = InkTextSoft, style = SoftType.meta)
+                    } else {
+                        InspectorSection("Availability", inspector.availability.map { "· ${it.dateLabel} ${it.timeLabel} — ${it.subject}" })
+                        InspectorSection("Bookings as tutor", inspector.bookingsAsTutor.map { "· ${it.dateLabel} ${it.timeLabel} — ${it.subject}" })
+                        InspectorSection("Bookings as student", inspector.bookingsAsStudent.map { "· ${it.dateLabel} ${it.timeLabel} — ${it.subject}" })
+                        InspectorSection("Reviews received", inspector.reviewsReceived.map { "· ${it.rating}/5 ${it.studentDisplayName} — ${it.comment}" })
+                        InspectorSection("Reports received", inspector.reportsReceived.map { "· ${it.reason} — ${it.status}" })
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
         }
     }
 }
@@ -533,12 +742,10 @@ private fun InspectorSection(title: String, items: List<String>) {
     Text(
         title.uppercase(),
         color = PwrNavy,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.5.sp
+        style = SoftType.eyebrow
     )
-    if (items.isEmpty()) Text("None.", color = InkTextSoft, style = MaterialTheme.typography.bodySmall)
-    items.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = InkText) }
+    if (items.isEmpty()) Text("None.", color = Ink3, style = SoftType.bodySm)
+    items.forEach { Text(it, style = SoftType.bodySm, color = InkText) }
 }
 
 @Suppress("UNUSED")
