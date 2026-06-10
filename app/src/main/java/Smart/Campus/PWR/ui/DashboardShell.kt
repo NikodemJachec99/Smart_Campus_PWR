@@ -20,6 +20,7 @@ import Smart.Campus.PWR.ui.screens.CalendarTab
 import Smart.Campus.PWR.ui.screens.ChatTab
 import Smart.Campus.PWR.ui.screens.ConversationScreen
 import Smart.Campus.PWR.ui.screens.CoursesTab
+import Smart.Campus.PWR.ui.screens.EarningsTab
 import Smart.Campus.PWR.ui.screens.HomeTab
 import Smart.Campus.PWR.ui.screens.LessonsTab
 import Smart.Campus.PWR.ui.screens.NotificationsScreen
@@ -293,12 +294,20 @@ fun MainShellScreen(
                                     onSubmitReport = onSubmitReport
                                 )
                             }
+                            composable(DashboardRoutes.EARNINGS) {
+                                EarningsTab(
+                                    state = state,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
                             composable(DashboardRoutes.PROFILE) {
                                 ProfileTab(
                                     currentUser = currentUser,
                                     activeRole = activeRole,
                                     state = state,
-                                    onLogout = onLogout
+                                    onLogout = onLogout,
+                                    onToggleRole = onToggleRole,
+                                    onNavigate = { navController.navigateToRoute(it) }
                                 )
                             }
                         }
