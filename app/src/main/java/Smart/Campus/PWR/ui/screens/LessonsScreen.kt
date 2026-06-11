@@ -93,7 +93,8 @@ fun LessonsTab(
     onClearMessages: () -> Unit,
     onStartReschedule: (String) -> Unit = {},
     onReschedule: (String, String) -> Unit = { _, _ -> },
-    onClearReschedule: () -> Unit = {}
+    onClearReschedule: () -> Unit = {},
+    onOpenDirectWith: (String, String) -> Unit = { _, _ -> }
 ) {
     val bookings = state.dashboardState.myStudentBookings
     val reviewedIds = state.dashboardState.reviewsByMe
@@ -167,6 +168,7 @@ fun LessonsTab(
                     rescheduleTargetBookingId = state.rescheduleTargetBookingId,
                     availableTutorSlots = state.dashboardState.availableTutorSlots,
                     onNavigate = onNavigate,
+                    onOpenDirectWith = onOpenDirectWith,
                     onCancelBooking = onCancelBooking,
                     onStartReschedule = onStartReschedule,
                     onReschedule = onReschedule,
@@ -195,6 +197,7 @@ private fun UpcomingContent(
     rescheduleTargetBookingId: String?,
     availableTutorSlots: List<TutorAvailabilityUi>,
     onNavigate: (String) -> Unit,
+    onOpenDirectWith: (String, String) -> Unit,
     onCancelBooking: (String, String, String) -> Unit,
     onStartReschedule: (String) -> Unit,
     onReschedule: (String, String) -> Unit,
@@ -247,6 +250,7 @@ private fun UpcomingContent(
                         },
                         onCancelBooking = onCancelBooking,
                         onNavigate = onNavigate,
+                        onOpenDirectWith = onOpenDirectWith,
                         onStartReschedule = onStartReschedule,
                         onReschedule = onReschedule,
                         onClearReschedule = onClearReschedule
@@ -372,6 +376,7 @@ private fun UpcomingLessonCard(
     openSlotsForTutor: List<TutorAvailabilityUi>,
     onCancelBooking: (String, String, String) -> Unit,
     onNavigate: (String) -> Unit,
+    onOpenDirectWith: (String, String) -> Unit,
     onStartReschedule: (String) -> Unit,
     onReschedule: (String, String) -> Unit,
     onClearReschedule: () -> Unit
@@ -510,19 +515,19 @@ private fun UpcomingLessonCard(
                     modifier = Modifier.weight(1f)
                 )
             } else if (isConfirmed) {
-                // Confirmed but no URL: show disabled-style Details button
+                // Confirmed but no URL: message the tutor directly
                 SoftButton(
-                    text = "Details",
-                    onClick = { onNavigate(DashboardRoutes.CHAT) },
+                    text = "Message",
+                    onClick = { onOpenDirectWith(lesson.tutorId, lesson.tutorDisplayName) },
                     variant = SoftButtonVariant.Primary,
                     size = SoftButtonSize.Sm,
                     modifier = Modifier.weight(1f)
                 )
             } else {
-                // PENDING: Details goes to chat
+                // PENDING: message the tutor directly
                 SoftButton(
-                    text = "Details",
-                    onClick = { onNavigate(DashboardRoutes.CHAT) },
+                    text = "Message",
+                    onClick = { onOpenDirectWith(lesson.tutorId, lesson.tutorDisplayName) },
                     variant = SoftButtonVariant.Soft,
                     size = SoftButtonSize.Sm,
                     modifier = Modifier.weight(1f)

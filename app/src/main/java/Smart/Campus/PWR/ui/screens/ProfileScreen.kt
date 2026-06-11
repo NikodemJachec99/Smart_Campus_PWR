@@ -2,6 +2,9 @@ package Smart.Campus.PWR.ui.screens
 
 import Smart.Campus.PWR.auth.AppUser
 import Smart.Campus.PWR.auth.UserRole
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import Smart.Campus.PWR.ui.components.softindigo.CardQ
 import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
 import Smart.Campus.PWR.ui.components.softindigo.RoleSwitch
@@ -68,7 +71,8 @@ fun ProfileTab(
     onProfileProgramChanged: (String) -> Unit = {},
     onProfileStudyYearChanged: (String) -> Unit = {},
     onProfileFacultyChanged: (String) -> Unit = {},
-    onSaveProfile: () -> Unit = {}
+    onSaveProfile: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {}
 ) {
     var editing by remember { mutableStateOf(false) }
     val isTutor = activeRole == UserRole.TUTOR
@@ -83,6 +87,7 @@ fun ProfileTab(
         studentBookings.filter { it.status == "booked" }.sumOf { estimateProfileHours(it) }
     }
     val distinctTutorsCount = studentBookings.map { it.tutorId }.distinct().size
+    val distinctStudentsCount = tutorBookings.map { it.studentId }.filter { it.isNotBlank() }.distinct().size
 
     Column(
         modifier = Modifier
@@ -91,15 +96,7 @@ fun ProfileTab(
             .verticalScroll(rememberScrollState())
     ) {
         // ── Top bar ──────────────────────────────────────────────────────────
-        SoftTopBar(
-            title = "Profile",
-            actions = {
-                SoftIconButton(
-                    icon = SoftIcons.settings,
-                    onClick = { /* DESIGN-PLACEHOLDER */ }
-                )
-            }
-        )
+        SoftTopBar(title = "Profile")
 
         Column(
             modifier = Modifier
@@ -207,7 +204,7 @@ fun ProfileTab(
                 }
                 Tile(modifier = Modifier.weight(1f), padding = 14.dp) {
                     Text(
-                        text = if (isTutor) "—" else distinctTutorsCount.toString(), // DESIGN-PLACEHOLDER for tutor
+                        text = if (isTutor) distinctStudentsCount.toString() else distinctTutorsCount.toString(),
                         style = SoftType.h2,
                         color = InkToken,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -221,6 +218,7 @@ fun ProfileTab(
             }
 
             // ── Menu card ─────────────────────────────────────────────────────
+            val context = LocalContext.current
             val menuItems = buildList {
                 add(ProfileMenuItem(
                     title = "Edit profile",
@@ -249,13 +247,19 @@ fun ProfileTab(
                     title = "Notifications",
                     subtitle = null,
                     icon = SoftIcons.bell,
-                    onClick = { /* DESIGN-PLACEHOLDER */ }
+                    onClick = onOpenNotifications
                 ))
                 add(ProfileMenuItem(
                     title = "Help & support",
-                    subtitle = null,
+                    subtitle = "Email the Smart Campus team",
                     icon = SoftIcons.shield,
-                    onClick = { /* DESIGN-PLACEHOLDER */ }
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:smartcampuspwr@gmail.com")
+                            putExtra(Intent.EXTRA_SUBJECT, "Smart Campus PWR — support")
+                        }
+                        runCatching { context.startActivity(intent) }
+                    }
                 ))
             }
 

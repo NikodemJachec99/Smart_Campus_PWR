@@ -22,6 +22,9 @@ import Smart.Campus.PWR.ui.components.softindigo.Tile
 import Smart.Campus.PWR.ui.components.softindigo.subjectColors
 import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.ui.state.DashboardRoutes
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
 import Smart.Campus.PWR.ui.theme.Bg
@@ -31,6 +34,7 @@ import Smart.Campus.PWR.ui.theme.Ink2
 import Smart.Campus.PWR.ui.theme.Ink3
 import Smart.Campus.PWR.ui.theme.InkToken
 import Smart.Campus.PWR.ui.theme.Primary
+import Smart.Campus.PWR.ui.theme.Primary50
 import Smart.Campus.PWR.ui.theme.Primary600
 import Smart.Campus.PWR.ui.theme.Primary700
 import Smart.Campus.PWR.ui.theme.SoftType
@@ -55,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -172,11 +177,20 @@ private fun StudentHomeContent(
 
         // ── Next lesson hero card ─────────────────────────────────────────────
         if (nextLesson != null) {
+            val context = LocalContext.current
             NextLessonHeroCard(
                 lesson = nextLesson,
                 minutesUntil = nextLessonMinutes,
                 onMessage = { onNavigate(DashboardRoutes.CHAT) },
-                onJoin = { /* placeholder Join action */ }
+                onJoin = {
+                    if (nextLesson.meetingUrl.isNotBlank()) {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(nextLesson.meetingUrl)))
+                        }
+                    } else {
+                        onNavigate(DashboardRoutes.LESSONS)
+                    }
+                }
             )
         } else {
             EmptyNextLessonCard()
@@ -196,6 +210,47 @@ private fun StudentHomeContent(
                     indication = null
                 ) { onNavigate(DashboardRoutes.CALENDAR) }
         )
+
+        // ── Assignments shortcut (Tasks is not in the student bottom nav) ────
+        CardQ(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onNavigate(DashboardRoutes.ASSIGNMENTS) },
+            padding = 14.dp
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Primary50),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = SoftIcons.task,
+                        contentDescription = null,
+                        tint = Primary600,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Assignments", style = SoftType.title)
+                    Text(text = "Submit work and track deadlines", style = SoftType.meta)
+                }
+                Icon(
+                    imageVector = SoftIcons.chev,
+                    contentDescription = null,
+                    tint = Ink3,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
 
         // ── Browse by subject ─────────────────────────────────────────────────
         SectionHead(
@@ -225,7 +280,10 @@ private fun StudentHomeContent(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 recommendedTutors.forEach { tutor ->
-                    TutorRecommendationCard(tutor = tutor)
+                    TutorRecommendationCard(
+                        tutor = tutor,
+                        onClick = { onNavigate(DashboardRoutes.CALENDAR) }
+                    )
                 }
             }
         }
@@ -630,8 +688,20 @@ private fun BrowseSubjectsGrid(
 }
 
 @Composable
-private fun TutorRecommendationCard(tutor: Smart.Campus.PWR.ui.state.TutorSummaryUi) {
-    CardQ(modifier = Modifier.fillMaxWidth(), padding = 14.dp) {
+private fun TutorRecommendationCard(
+    tutor: Smart.Campus.PWR.ui.state.TutorSummaryUi,
+    onClick: () -> Unit = {}
+) {
+    CardQ(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        padding = 14.dp
+    ) {
         Row(
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(13.dp)

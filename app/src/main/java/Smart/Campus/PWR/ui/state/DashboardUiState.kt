@@ -18,8 +18,6 @@ object DashboardRoutes {
     const val REVIEWS = "reviews"
     const val PROFILE = "profile"
     const val COURSES = "courses"
-    const val CONVERSATION = "conversation"
-    const val NOTIFICATIONS = "notifications"
     const val LESSONS = "lessons"
 }
 

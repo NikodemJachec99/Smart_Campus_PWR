@@ -175,13 +175,8 @@ fun ChatTab(
             .background(Bg)
             .statusBarsPadding()
     ) {
-        // Top bar: title + search action
-        SoftTopBar(
-            title = "Messages",
-            actions = {
-                SoftIconButton(icon = SoftIcons.search, onClick = { /* DESIGN-PLACEHOLDER: expand search */ })
-            }
-        )
+        // Top bar (search lives in the field below)
+        SoftTopBar(title = "Messages")
 
         MessageBlock(state.errorMessage, state.infoMessage)
 
@@ -553,11 +548,7 @@ fun ConversationScreen(
             if (isCourse) {
                 // Shared course file library (visible to tutor and every member)
                 SoftIconButton(icon = SoftIcons.doc, onClick = onOpenMaterials)
-            } else {
-                // DESIGN-PLACEHOLDER: no live video callback
-                SoftIconButton(icon = SoftIcons.video, onClick = { /* DESIGN-PLACEHOLDER */ })
             }
-            SoftIconButton(icon = SoftIcons.more, onClick = { /* DESIGN-PLACEHOLDER */ })
         }
 
         // ── Message list ─────────────────────────────────────────────────────

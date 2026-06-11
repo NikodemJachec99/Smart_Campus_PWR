@@ -29,6 +29,7 @@ import Smart.Campus.PWR.ui.components.softindigo.SubjectDot
 import Smart.Campus.PWR.ui.components.softindigo.subjectColors
 import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.tutoring.TutorRatings
+import Smart.Campus.PWR.ui.state.DashboardRoutes
 import Smart.Campus.PWR.ui.state.DashboardUiState
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
 import Smart.Campus.PWR.ui.state.TutorAvailabilityUi
@@ -151,7 +152,9 @@ fun CalendarTab(
     onTutorSearchMinRatingChanged: (Int?) -> Unit,
     onTutorSearchAvailableTodayChanged: (Boolean) -> Unit,
     onTutorSearchSortChanged: (String) -> Unit,
-    onClearTutorSearchFilters: () -> Unit
+    onClearTutorSearchFilters: () -> Unit,
+    onOpenDirectWith: (String, String) -> Unit = { _, _ -> },
+    onNavigate: (String) -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -190,7 +193,9 @@ fun CalendarTab(
                 onTutorSearchMinRatingChanged = onTutorSearchMinRatingChanged,
                 onTutorSearchAvailableTodayChanged = onTutorSearchAvailableTodayChanged,
                 onTutorSearchSortChanged = onTutorSearchSortChanged,
-                onClearTutorSearchFilters = onClearTutorSearchFilters
+                onClearTutorSearchFilters = onClearTutorSearchFilters,
+                onOpenDirectWith = onOpenDirectWith,
+                onNavigate = onNavigate
             )
         }
     }
@@ -215,7 +220,9 @@ private fun StudentFindFlow(
     onTutorSearchMinRatingChanged: (Int?) -> Unit,
     onTutorSearchAvailableTodayChanged: (Boolean) -> Unit,
     onTutorSearchSortChanged: (String) -> Unit,
-    onClearTutorSearchFilters: () -> Unit
+    onClearTutorSearchFilters: () -> Unit,
+    onOpenDirectWith: (String, String) -> Unit,
+    onNavigate: (String) -> Unit
 ) {
     var step: StudentStep by remember { mutableStateOf(StudentStep.Find) }
 
@@ -223,6 +230,7 @@ private fun StudentFindFlow(
         is StudentStep.Find -> ScreenFind(
             state = state,
             onTutorSearchSubjectChanged = onTutorSearchSubjectChanged,
+            onClearTutorSearchFilters = onClearTutorSearchFilters,
             onNavigateResults = { step = StudentStep.Results }
         )
         is StudentStep.Results -> ScreenFindResults(
@@ -272,7 +280,9 @@ private fun StudentFindFlow(
                     initialDate = s.slot.dateLabel
                 )
             },
-            onClose = { step = StudentStep.Find }
+            onClose = { step = StudentStep.Find },
+            onMessageTutor = { onOpenDirectWith(s.slot.tutorId, s.slot.tutorDisplayName) },
+            onViewLessons = { onNavigate(DashboardRoutes.LESSONS) }
         )
     }
 }
@@ -283,6 +293,7 @@ private fun StudentFindFlow(
 private fun ScreenFind(
     state: SmartCampusUiState,
     onTutorSearchSubjectChanged: (String) -> Unit,
+    onClearTutorSearchFilters: () -> Unit,
     onNavigateResults: () -> Unit
 ) {
     val subjects = remember(state.dashboardState.availableTutorSlots) {
@@ -324,7 +335,10 @@ private fun ScreenFind(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.horizontalScroll(rememberScrollState())
             ) {
-                Chip(text = "All", selected = true) // DESIGN-PLACEHOLDER: navigates to results with no filter
+                Chip(text = "All", selected = true) {
+                    onClearTutorSearchFilters()
+                    onNavigateResults()
+                }
                 Chip(text = "Online", leadingIcon = SoftIcons.globe) { onNavigateResults() }
                 Chip(text = "In person", leadingIcon = SoftIcons.pin) { onNavigateResults() }
                 Chip(text = "Filters", leadingIcon = SoftIcons.sliders) { onNavigateResults() }
@@ -844,10 +858,6 @@ private fun ScreenTutorProfile(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SoftIconButton(icon = SoftIcons.back, onClick = onBack)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SoftIconButton(icon = SoftIcons.heart, onClick = {}) // DESIGN-PLACEHOLDER
-                    SoftIconButton(icon = SoftIcons.more, onClick = {}) // DESIGN-PLACEHOLDER
-                }
             }
 
             // Header section
@@ -1423,7 +1433,9 @@ private fun ScreenBookingConfirm(
     state: SmartCampusUiState,
     slot: TutorAvailabilityUi,
     onBackToBooking: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onMessageTutor: () -> Unit,
+    onViewLessons: () -> Unit
 ) {
     val context = LocalContext.current
     val bookingRequest = state.bookingRequest
@@ -1651,13 +1663,13 @@ private fun ScreenBookingConfirm(
             ) {
                 SoftButton(
                     text = "Message",
-                    onClick = {}, // DESIGN-PLACEHOLDER: would navigate to chat
+                    onClick = onMessageTutor,
                     modifier = Modifier.weight(1f),
                     variant = SoftButtonVariant.Outline
                 )
                 SoftButton(
                     text = "View lesson",
-                    onClick = {}, // DESIGN-PLACEHOLDER: would navigate to lessons
+                    onClick = onViewLessons,
                     modifier = Modifier.weight(1f),
                     variant = SoftButtonVariant.Outline
                 )

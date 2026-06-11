@@ -282,7 +282,9 @@ fun MainShellScreen(
                                     onTutorSearchMinRatingChanged = viewModel::onTutorSearchMinRatingChanged,
                                     onTutorSearchAvailableTodayChanged = viewModel::onTutorSearchAvailableTodayChanged,
                                     onTutorSearchSortChanged = viewModel::onTutorSearchSortChanged,
-                                    onClearTutorSearchFilters = viewModel::clearTutorSearchFilters
+                                    onClearTutorSearchFilters = viewModel::clearTutorSearchFilters,
+                                    onOpenDirectWith = viewModel::openDirectWith,
+                                    onNavigate = { navController.navigateToRoute(it) }
                                 )
                             }
                             composable(DashboardRoutes.LESSONS) {
@@ -294,7 +296,8 @@ fun MainShellScreen(
                                     onClearMessages = onClearMessages,
                                     onStartReschedule = viewModel::startReschedule,
                                     onReschedule = viewModel::rescheduleBooking,
-                                    onClearReschedule = viewModel::clearReschedule
+                                    onClearReschedule = viewModel::clearReschedule,
+                                    onOpenDirectWith = viewModel::openDirectWith
                                 )
                             }
                             composable(DashboardRoutes.ASSIGNMENTS) {
@@ -375,7 +378,8 @@ fun MainShellScreen(
                                     onProfileProgramChanged = viewModel::onProfileProgramChanged,
                                     onProfileStudyYearChanged = viewModel::onProfileStudyYearChanged,
                                     onProfileFacultyChanged = viewModel::onProfileFacultyChanged,
-                                    onSaveProfile = viewModel::saveProfile
+                                    onSaveProfile = viewModel::saveProfile,
+                                    onOpenNotifications = { showNotifications = true }
                                 )
                             }
                         }
@@ -479,7 +483,6 @@ fun AdminShellScreen(
             title = "Moderation",
             subtitle = "Smart Campus PWR · admin",
             actions = {
-                SoftIconButton(icon = SoftIcons.filter, onClick = { /* filter — DESIGN-PLACEHOLDER: future filter sheet */ })
                 SoftIconButton(
                     icon = SoftIcons.repeat,
                     onClick = { onClearMessages(); onRefresh() }
