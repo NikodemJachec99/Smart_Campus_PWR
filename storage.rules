@@ -101,6 +101,20 @@ service firebase.storage {
       allow delete: if isSignedIn() && (request.auth.uid == senderUid || hasRole('admin'));
     }
 
+    match /course_materials/{courseId}/{uploaderUid}/{materialId}/{fileName} {
+      allow read: if canReadCourseChat(courseId) || hasRole('admin');
+      allow create, update: if canReadCourseChat(courseId)
+        && canWriteChatAttachment(uploaderUid);
+      allow delete: if isSignedIn() && (
+        request.auth.uid == uploaderUid
+        || hasRole('admin')
+        || (
+          firestore.exists(coursePath(courseId))
+          && firestore.get(coursePath(courseId)).data.tutorUid == request.auth.uid
+        )
+      );
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

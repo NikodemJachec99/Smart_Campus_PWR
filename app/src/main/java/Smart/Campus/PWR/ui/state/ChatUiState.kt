@@ -157,7 +157,11 @@ data class ChatUiState(
     val uploadProgress: Float? = null,
     val hasNewMessages: Boolean = false,
     val announcementToggle: Boolean = false,
-    val isSending: Boolean = false
+    val isSending: Boolean = false,
+    val materialsOpen: Boolean = false,
+    val materials: List<CourseMaterialUi> = emptyList(),
+    val materialsLoading: Boolean = false,
+    val materialUploadProgress: Float? = null
 ) {
     val directUnreadCount: Int
         get() = directConversations.sumOf { it.unreadCount }

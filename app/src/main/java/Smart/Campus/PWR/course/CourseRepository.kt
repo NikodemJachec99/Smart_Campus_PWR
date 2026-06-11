@@ -1,15 +1,20 @@
 package Smart.Campus.PWR.course
 
 import Smart.Campus.PWR.auth.AppUser
+import Smart.Campus.PWR.chat.AttachmentContract
 import Smart.Campus.PWR.chat.ChatReadState
+import Smart.Campus.PWR.ui.state.CourseMaterialUi
 import Smart.Campus.PWR.ui.state.CourseMemberUi
 import Smart.Campus.PWR.ui.state.CourseUi
+import android.net.Uri
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.time.ZoneId
@@ -24,7 +29,8 @@ object CoursePaths {
 }
 
 class CourseRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val storage: FirebaseStorage = FirebaseStorage.getInstance()
 ) {
     private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH).withZone(ZoneId.systemDefault())
     private val chatFmt = DateTimeFormatter.ofPattern("MMM d, HH:mm", Locale.ENGLISH).withZone(ZoneId.systemDefault())
@@ -147,6 +153,89 @@ class CourseRepository(
                     onUpdate(snapshot?.documents.orEmpty().mapNotNull { mapCourse(it, uid) })
                 }
             }
+
+    private fun materialsCollection(courseId: String) =
+        firestore.collection("courses").document(courseId).collection("materials")
+
+    fun listenCourseMaterials(
+        courseId: String,
+        onUpdate: (List<CourseMaterialUi>) -> Unit,
+        onError: (Throwable) -> Unit
+    ): ListenerRegistration =
+        materialsCollection(courseId)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    onError(error)
+                } else {
+                    onUpdate(snapshot?.documents.orEmpty().mapNotNull { mapMaterial(it) })
+                }
+            }
+
+    suspend fun uploadCourseMaterial(
+        courseId: String,
+        uploader: AppUser,
+        fileName: String,
+        mimeType: String,
+        sizeBytes: Long,
+        uri: Uri,
+        onProgress: (Float) -> Unit
+    ) {
+        AttachmentContract.validationError(fileName, mimeType, sizeBytes)?.let { error ->
+            throw IllegalArgumentException(error)
+        }
+        val materialRef = materialsCollection(courseId).document()
+        val safeName = AttachmentContract.sanitizeFileName(fileName)
+        val storagePath = "course_materials/$courseId/${uploader.uid}/${materialRef.id}/$safeName"
+        val reference = storage.reference.child(storagePath)
+        val metadata = StorageMetadata.Builder()
+            .setContentType(mimeType)
+            .setCustomMetadata("uploaderUid", uploader.uid)
+            .build()
+        reference.putFile(uri, metadata)
+            .addOnProgressListener { snapshot ->
+                val total = snapshot.totalByteCount.takeIf { it > 0L } ?: sizeBytes
+                onProgress((snapshot.bytesTransferred.toFloat() / total.toFloat()).coerceIn(0f, 1f))
+            }
+            .await()
+        val downloadUrl = reference.downloadUrl.await().toString()
+        onProgress(1f)
+        materialRef.set(
+            mapOf(
+                "fileName" to fileName,
+                "mimeType" to mimeType,
+                "sizeBytes" to sizeBytes,
+                "storagePath" to storagePath,
+                "downloadUrl" to downloadUrl,
+                "uploaderUid" to uploader.uid,
+                "uploaderName" to uploader.displayName,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
+    }
+
+    suspend fun deleteCourseMaterial(courseId: String, material: CourseMaterialUi) {
+        materialsCollection(courseId).document(material.id).delete().await()
+        if (material.storagePath.isNotBlank()) {
+            runCatching { storage.reference.child(material.storagePath).delete().await() }
+        }
+    }
+
+    private fun mapMaterial(doc: DocumentSnapshot): CourseMaterialUi? {
+        val fileName = doc.getString("fileName") ?: return null
+        return CourseMaterialUi(
+            id = doc.id,
+            fileName = fileName,
+            mimeType = doc.getString("mimeType").orEmpty().ifBlank { "application/octet-stream" },
+            sizeBytes = doc.getLong("sizeBytes") ?: 0L,
+            storagePath = doc.getString("storagePath").orEmpty(),
+            downloadUrl = doc.getString("downloadUrl").orEmpty(),
+            uploaderUid = doc.getString("uploaderUid").orEmpty(),
+            uploaderName = doc.getString("uploaderName").orEmpty(),
+            createdAtLabel = chatLabel(doc.get("createdAt")),
+            createdAtMillis = millis(doc.get("createdAt"))
+        )
+    }
 
     private fun mapCourse(doc: DocumentSnapshot, uid: String): CourseUi? {
         val name = doc.getString("name") ?: return null

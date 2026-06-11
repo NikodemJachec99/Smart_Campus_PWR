@@ -79,6 +79,7 @@ class SmartCampusViewModel(
     private var conversationsRealtime: ListenerRegistration? = null
     private var messagesRealtime: ListenerRegistration? = null
     private var typingRealtime: ListenerRegistration? = null
+    private var materialsRealtime: ListenerRegistration? = null
     private var notificationsRealtime: ListenerRegistration? = null
     private var mySubmissionAssignmentIds: List<String> = emptyList()
     private val readReceiptInFlight = mutableSetOf<String>()
@@ -1269,8 +1270,10 @@ class SmartCampusViewModel(
         }
         messagesRealtime?.remove()
         typingRealtime?.remove()
+        materialsRealtime?.remove()
         messagesRealtime = null
         typingRealtime = null
+        materialsRealtime = null
         _uiState.update {
             it.copy(
                 chat = it.chat.copy(
@@ -1290,9 +1293,91 @@ class SmartCampusViewModel(
                     pendingAttachment = null,
                     uploadProgress = null,
                     hasNewMessages = false,
-                    announcementToggle = false
+                    announcementToggle = false,
+                    materialsOpen = false,
+                    materials = emptyList(),
+                    materialsLoading = false,
+                    materialUploadProgress = null
                 )
             )
+        }
+    }
+
+    fun openCourseMaterials() {
+        val courseId = _uiState.value.chat.activeCourseId ?: return
+        materialsRealtime?.remove()
+        _uiState.update {
+            it.copy(chat = it.chat.copy(materialsOpen = true, materials = emptyList(), materialsLoading = true))
+        }
+        materialsRealtime = courseRepository.listenCourseMaterials(
+            courseId = courseId,
+            onUpdate = { materials ->
+                _uiState.update {
+                    it.copy(chat = it.chat.copy(materials = materials, materialsLoading = false))
+                }
+            },
+            onError = { error ->
+                _uiState.update { it.copy(chat = it.chat.copy(materialsLoading = false)) }
+                showRealtimeError("Course materials", error)
+            }
+        )
+    }
+
+    fun closeCourseMaterials() {
+        materialsRealtime?.remove()
+        materialsRealtime = null
+        _uiState.update {
+            it.copy(
+                chat = it.chat.copy(
+                    materialsOpen = false,
+                    materials = emptyList(),
+                    materialsLoading = false,
+                    materialUploadProgress = null
+                )
+            )
+        }
+    }
+
+    fun uploadCourseMaterial(uri: String, fileName: String, mimeType: String, sizeBytes: Long) {
+        val me = _uiState.value.currentUser ?: return
+        val courseId = _uiState.value.chat.activeCourseId ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(chat = it.chat.copy(materialUploadProgress = 0f)) }
+            try {
+                courseRepository.uploadCourseMaterial(
+                    courseId = courseId,
+                    uploader = me,
+                    fileName = fileName,
+                    mimeType = mimeType,
+                    sizeBytes = sizeBytes,
+                    uri = Uri.parse(uri),
+                    onProgress = { progress ->
+                        _uiState.update { it.copy(chat = it.chat.copy(materialUploadProgress = progress)) }
+                    }
+                )
+                _uiState.update { it.copy(chat = it.chat.copy(materialUploadProgress = null)) }
+            } catch (error: Throwable) {
+                Log.e(TAG, "Uploading course material failed", error)
+                _uiState.update {
+                    it.copy(
+                        chat = it.chat.copy(materialUploadProgress = null),
+                        errorMessage = authRepository.userMessage(error)
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteCourseMaterial(materialId: String) {
+        val courseId = _uiState.value.chat.activeCourseId ?: return
+        val material = _uiState.value.chat.materials.firstOrNull { it.id == materialId } ?: return
+        viewModelScope.launch {
+            try {
+                courseRepository.deleteCourseMaterial(courseId, material)
+            } catch (error: Throwable) {
+                Log.e(TAG, "Deleting course material failed", error)
+                _uiState.update { it.copy(errorMessage = authRepository.userMessage(error)) }
+            }
         }
     }
 
@@ -2259,6 +2344,7 @@ class SmartCampusViewModel(
         conversationsRealtime?.remove()
         messagesRealtime?.remove()
         typingRealtime?.remove()
+        materialsRealtime?.remove()
         notificationsRealtime?.remove()
         mySubmissionAssignmentIds = emptyList()
         tutoringRealtime = null
@@ -2268,6 +2354,7 @@ class SmartCampusViewModel(
         conversationsRealtime = null
         messagesRealtime = null
         typingRealtime = null
+        materialsRealtime = null
         notificationsRealtime = null
     }
 

@@ -48,6 +48,7 @@ import Smart.Campus.PWR.ui.screens.AssignmentsTab
 import Smart.Campus.PWR.ui.screens.CalendarTab
 import Smart.Campus.PWR.ui.screens.ChatTab
 import Smart.Campus.PWR.ui.screens.ConversationScreen
+import Smart.Campus.PWR.ui.screens.CourseMaterialsScreen
 import Smart.Campus.PWR.ui.screens.CoursesTab
 import Smart.Campus.PWR.ui.screens.HomeTab
 import Smart.Campus.PWR.ui.screens.LessonsTab
@@ -183,6 +184,16 @@ fun MainShellScreen(
                 .background(AppBackground)
         ) {
             when {
+                conversationActive && state.chat.materialsOpen -> {
+                    BackHandler { viewModel.closeCourseMaterials() }
+                    CourseMaterialsScreen(
+                        state = state,
+                        onBack = { viewModel.closeCourseMaterials() },
+                        onUpload = viewModel::uploadCourseMaterial,
+                        onDelete = viewModel::deleteCourseMaterial
+                    )
+                }
+
                 conversationActive -> {
                     BackHandler { viewModel.closeConversation() }
                     ConversationScreen(
@@ -201,7 +212,8 @@ fun MainShellScreen(
                         onReactToMessage = viewModel::reactToMessage,
                         onDeleteMessage = viewModel::deleteMessage,
                         onReportMessage = viewModel::reportMessage,
-                        onClearNewMessageHint = viewModel::clearNewMessageHint
+                        onClearNewMessageHint = viewModel::clearNewMessageHint,
+                        onOpenMaterials = viewModel::openCourseMaterials
                     )
                 }
 

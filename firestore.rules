@@ -629,6 +629,39 @@ service cloud.firestore {
             && uid == request.auth.uid;
         }
       }
+
+      match /materials/{materialId} {
+        allow read: if isCourseParticipant(courseId) || isAdmin();
+
+        allow create: if isCourseParticipant(courseId)
+          && request.resource.data.uploaderUid == request.auth.uid
+          && request.resource.data.uploaderName is string
+          && request.resource.data.fileName is string
+          && request.resource.data.fileName.size() > 0
+          && request.resource.data.fileName.size() <= 180
+          && request.resource.data.mimeType in allowedChatMimeTypes()
+          && request.resource.data.sizeBytes is int
+          && request.resource.data.sizeBytes > 0
+          && request.resource.data.sizeBytes < 10 * 1024 * 1024
+          && request.resource.data.storagePath is string
+          && request.resource.data.downloadUrl is string
+          && request.resource.data.keys().hasOnly([
+            'fileName',
+            'mimeType',
+            'sizeBytes',
+            'storagePath',
+            'downloadUrl',
+            'uploaderUid',
+            'uploaderName',
+            'createdAt'
+          ]);
+
+        allow update: if isAdmin();
+
+        allow delete: if isAdmin()
+          || isCourseOwner(courseId)
+          || (isCourseParticipant(courseId) && resource.data.uploaderUid == request.auth.uid);
+      }
     }
 
     match /conversations/{conversationId} {

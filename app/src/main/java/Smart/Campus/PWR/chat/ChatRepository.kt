@@ -27,16 +27,6 @@ object ChatIds {
     }
 }
 
-private val allowedAttachmentMimeTypes = setOf(
-    "application/pdf",
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/webp",
-    "image/heic",
-    "image/heif"
-)
-
 data class ChatConversation(
     val id: String,
     val title: String,
@@ -287,9 +277,10 @@ class ChatRepository(
         uri: Uri,
         onProgress: (Float) -> Unit
     ): OutgoingChatAttachment {
-        require(sizeBytes in 1 until 10 * 1024 * 1024) { "Attachment must be smaller than 10 MB." }
-        require(mimeType in allowedAttachmentMimeTypes) { "Unsupported attachment type." }
-        val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "attachment" }
+        AttachmentContract.validationError(fileName, mimeType, sizeBytes)?.let { error ->
+            throw IllegalArgumentException(error)
+        }
+        val safeName = AttachmentContract.sanitizeFileName(fileName)
         val storagePath = if (target.isCourse) {
             "chat/courses/${target.id}/$senderUid/$clientMessageId/$safeName"
         } else {

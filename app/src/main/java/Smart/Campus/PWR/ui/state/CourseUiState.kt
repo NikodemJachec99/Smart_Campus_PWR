@@ -22,6 +22,30 @@ data class CourseUi(
         get() = unreadCount > 0
 }
 
+data class CourseMaterialUi(
+    val id: String,
+    val fileName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val storagePath: String,
+    val downloadUrl: String,
+    val uploaderUid: String,
+    val uploaderName: String,
+    val createdAtLabel: String,
+    val createdAtMillis: Long = 0L
+) {
+    val isImage: Boolean
+        get() = mimeType.startsWith("image/")
+
+    val sizeLabel: String
+        get() = when {
+            sizeBytes >= 1024 * 1024 -> "${sizeBytes / (1024 * 1024)} MB"
+            sizeBytes >= 1024 -> "${sizeBytes / 1024} KB"
+            sizeBytes > 0 -> "$sizeBytes B"
+            else -> ""
+        }
+}
+
 data class CourseMemberUi(
     val studentUid: String,
     val displayName: String,

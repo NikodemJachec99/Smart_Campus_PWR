@@ -1,5 +1,6 @@
 package Smart.Campus.PWR.ui.screens
 
+import Smart.Campus.PWR.chat.AttachmentContract
 import Smart.Campus.PWR.ui.components.softindigo.Badge
 import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
 import Smart.Campus.PWR.ui.components.softindigo.Chip
@@ -25,6 +26,7 @@ import Smart.Campus.PWR.ui.state.MessageDeliveryState
 import Smart.Campus.PWR.ui.state.MessageUi
 import Smart.Campus.PWR.ui.state.PendingAttachmentUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
+import Smart.Campus.PWR.ui.util.readPickedFile
 import Smart.Campus.PWR.ui.theme.Amber
 import Smart.Campus.PWR.ui.theme.AmberBg
 import Smart.Campus.PWR.ui.theme.Bg
@@ -125,16 +127,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
-
-private val allowedChatMimeTypes = arrayOf(
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/webp",
-    "image/heic",
-    "image/heif",
-    "application/pdf"
-)
 
 // ─── ChatTab ─────────────────────────────────────────────────────────────────
 
@@ -388,7 +380,8 @@ fun ConversationScreen(
     onReactToMessage: (String, String) -> Unit,
     onDeleteMessage: (String) -> Unit,
     onReportMessage: (String) -> Unit,
-    onClearNewMessageHint: () -> Unit
+    onClearNewMessageHint: () -> Unit,
+    onOpenMaterials: () -> Unit = {}
 ) {
     val chat = state.chat
     val myUid = state.currentUser?.uid.orEmpty()
@@ -433,15 +426,17 @@ fun ConversationScreen(
             runCatching {
                 context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val file = context.readChatFile(uri)
-            when {
-                file == null -> pickError = "Could not read selected file."
-                file.mimeType !in allowedChatMimeTypes -> pickError = "Use PDF, JPEG, PNG, WebP, HEIC or HEIF."
-                file.sizeBytes !in 1 until 10 * 1024 * 1024 -> pickError = "File must be smaller than 10 MB."
-                else -> {
-                    pickError = null
-                    onAttachmentSelected(uri.toString(), file.fileName, file.mimeType, file.sizeBytes)
-                }
+            val file = context.readPickedFile(uri)
+            val error = if (file == null) {
+                "Could not read selected file."
+            } else {
+                AttachmentContract.validationError(file.fileName, file.mimeType, file.sizeBytes)
+            }
+            if (file != null && error == null) {
+                pickError = null
+                onAttachmentSelected(uri.toString(), file.fileName, file.mimeType, file.sizeBytes)
+            } else {
+                pickError = error
             }
         }
     }
@@ -555,8 +550,13 @@ fun ConversationScreen(
                     )
                 }
             }
-            // Action icons (video + more — DESIGN-PLACEHOLDER: no live callbacks)
-            SoftIconButton(icon = SoftIcons.video, onClick = { /* DESIGN-PLACEHOLDER */ })
+            if (isCourse) {
+                // Shared course file library (visible to tutor and every member)
+                SoftIconButton(icon = SoftIcons.doc, onClick = onOpenMaterials)
+            } else {
+                // DESIGN-PLACEHOLDER: no live video callback
+                SoftIconButton(icon = SoftIcons.video, onClick = { /* DESIGN-PLACEHOLDER */ })
+            }
             SoftIconButton(icon = SoftIcons.more, onClick = { /* DESIGN-PLACEHOLDER */ })
         }
 
@@ -679,7 +679,7 @@ fun ConversationScreen(
             state = state,
             isCourse = isCourse,
             pickError = pickError,
-            onPickAttachment = { launcher.launch(allowedChatMimeTypes) },
+            onPickAttachment = { launcher.launch(AttachmentContract.allowedMimeTypes.toTypedArray()) },
             onComposerChanged = onComposerChanged,
             onAnnouncementToggle = onAnnouncementToggle,
             onClearAttachment = onClearAttachment,
@@ -1564,31 +1564,6 @@ private fun SheetAction(
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
-private data class PickedChatFile(
-    val fileName: String,
-    val mimeType: String,
-    val sizeBytes: Long
-)
-
-private fun Context.readChatFile(uri: Uri): PickedChatFile? {
-    val resolver = contentResolver
-    var fileName = uri.lastPathSegment ?: "attachment"
-    var size = 0L
-    resolver.query(uri, null, null, null, null)?.use { cursor ->
-        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-        if (cursor.moveToFirst()) {
-            if (nameIndex >= 0) fileName = cursor.getString(nameIndex) ?: fileName
-            if (sizeIndex >= 0) size = cursor.getLong(sizeIndex)
-        }
-    }
-    val mimeType = resolver.getType(uri) ?: inferMimeType(fileName)
-    if (size <= 0L) {
-        size = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0L
-    }
-    return PickedChatFile(fileName = fileName, mimeType = mimeType, sizeBytes = size)
-}
-
 private fun openAttachment(context: Context, attachment: ChatAttachmentUi) {
     val source = attachment.downloadUrl.ifBlank { attachment.localUri }
     if (source.isBlank()) return
@@ -1607,16 +1582,6 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1024 -> "${bytes / 1024} KB"
     bytes > 0 -> "$bytes B"
     else -> "Unknown size"
-}
-
-private fun inferMimeType(fileName: String): String = when (fileName.substringAfterLast(".", "").lowercase()) {
-    "jpg", "jpeg" -> "image/jpeg"
-    "png" -> "image/png"
-    "webp" -> "image/webp"
-    "heic" -> "image/heic"
-    "heif" -> "image/heif"
-    "pdf" -> "application/pdf"
-    else -> "application/octet-stream"
 }
 
 private fun reactionLabel(key: String): String = when (key) {
