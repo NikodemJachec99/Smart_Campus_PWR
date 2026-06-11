@@ -1342,7 +1342,7 @@ class SmartCampusViewModel(
         val me = _uiState.value.currentUser ?: return
         val courseId = _uiState.value.chat.activeCourseId ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(chat = it.chat.copy(materialUploadProgress = 0f)) }
+            _uiState.update { it.copy(chat = it.chat.copy(materialUploadProgress = 0f), errorMessage = null) }
             try {
                 courseRepository.uploadCourseMaterial(
                     courseId = courseId,
