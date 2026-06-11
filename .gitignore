@@ -22,3 +22,7 @@ functions/node_modules/
 functions/.env*
 functions/serviceAccount*.json
 functions/*firebase-adminsdk*.json
+
+# Device debugging artifacts (screenshots, UI dumps)
+/phone_*.png
+/phone_*.xml

@@ -360,21 +360,5 @@ fun AppDangerButton(
     }
 }
 
-@Composable
-fun MetaText(label: String, value: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text(
-            label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = InkTextSoft,
-            fontWeight = FontWeight.Bold
-        )
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = InkText)
-    }
-}
-
 @Suppress("UNUSED")
 private val UnusedShadowSoft = ShadowSoft
