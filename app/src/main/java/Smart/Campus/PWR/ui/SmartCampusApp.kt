@@ -1,11 +1,8 @@
 package Smart.Campus.PWR.ui
 
-import Smart.Campus.PWR.ui.components.AppDangerButton
-import Smart.Campus.PWR.ui.components.AppPrimaryButton
 import Smart.Campus.PWR.ui.components.EditorialCard
 import Smart.Campus.PWR.ui.components.EditorialScreen
 import Smart.Campus.PWR.ui.components.MonoLabel
-import Smart.Campus.PWR.ui.components.Pill
 import Smart.Campus.PWR.ui.components.softindigo.Badge
 import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
 import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
@@ -25,7 +22,6 @@ import Smart.Campus.PWR.ui.theme.AppBackground
 import Smart.Campus.PWR.ui.theme.AppSurface
 import Smart.Campus.PWR.ui.theme.Bg
 import Smart.Campus.PWR.ui.theme.CardSurface
-import Smart.Campus.PWR.ui.theme.CardWhite
 import Smart.Campus.PWR.ui.theme.ClayAccent
 import Smart.Campus.PWR.ui.theme.DisplayFontFamily
 import Smart.Campus.PWR.ui.theme.ForestAccent
@@ -73,12 +69,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -789,61 +783,289 @@ private fun RegisterScreen(
     onClearMessages: () -> Unit
 ) {
     val form: RegisterFormState = state.registerForm
+    var passwordVisible by remember { mutableStateOf(false) }
 
-    AuthScaffold(
-        eyebrow = "Request access",
-        title = "Join the\nstudy circle.",
-        subtitle = "Create a tutoring account with a student, tutor, or dual role."
-    ) {
-        OutlinedTextField(
-            value = form.login,
-            onValueChange = {
-                onClearMessages()
-                onRegisterLoginChanged(it)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Login") },
-            singleLine = true
-        )
-        OutlinedTextField(
-            value = form.password,
-            onValueChange = {
-                onClearMessages()
-                onRegisterPasswordChanged(it)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Password (min 6 chars)") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation()
-        )
-        OutlinedTextField(
-            value = form.displayName,
-            onValueChange = {
-                onClearMessages()
-                onRegisterDisplayNameChanged(it)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Display name") },
-            singleLine = true
-        )
+    Scaffold(containerColor = Bg) { scaffoldPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(scaffoldPadding)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // ── Top bar: back arrow ────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SoftIconButton(
+                    icon = SoftIcons.back,
+                    onClick = onOpenLogin
+                )
+                Spacer(Modifier.width(1.dp))
+            }
 
-        EditorialCard {
-            MonoLabel("Roles")
-            RoleCheckbox(label = "I am a student", checked = form.student, onCheckedChange = onRegisterStudentChecked)
-            RoleCheckbox(label = "I am a tutor", checked = form.tutor, onCheckedChange = onRegisterTutorChecked)
+            // ── Header ────────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 14.dp)
+            ) {
+                // 52dp indigo cap badge
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .primShadow(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = SoftIcons.cap,
+                        contentDescription = null,
+                        tint = White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "Create your account.",
+                    style = SoftType.display.copy(
+                        lineHeight = 36.sp,
+                        letterSpacing = (-0.5).sp,
+                        color = InkToken
+                    )
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Dołącz do PWr — student, tutor lub obie role.",
+                    style = SoftType.body
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                // ── Login field ───────────────────────────────────────────────
+                SoftTextField(
+                    value = form.login,
+                    onValueChange = {
+                        onClearMessages()
+                        onRegisterLoginChanged(it)
+                    },
+                    label = "PWr login or email",
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // ── Display name field ────────────────────────────────────────
+                SoftTextField(
+                    value = form.displayName,
+                    onValueChange = {
+                        onClearMessages()
+                        onRegisterDisplayNameChanged(it)
+                    },
+                    label = "Display name",
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // ── Password field with Show affordance ───────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Password",
+                        style = SoftType.meta.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Ink2,
+                            fontSize = 12.sp
+                        )
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CardSurface)
+                            .border(1.dp, Line2, RoundedCornerShape(12.dp))
+                            .padding(vertical = 13.dp, horizontal = 14.dp)
+                    ) {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = form.password,
+                            onValueChange = {
+                                onClearMessages()
+                                onRegisterPasswordChanged(it)
+                            },
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontFamily = BodyFontFamily,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 15.sp,
+                                color = InkToken
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Primary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 42.dp)
+                        )
+                        if (form.password.isEmpty()) {
+                            Text(
+                                "min 6 characters",
+                                style = SoftType.body.copy(color = Ink3)
+                            )
+                        }
+                        Text(
+                            if (passwordVisible) "Hide" else "Show",
+                            style = SoftType.meta.copy(
+                                color = Primary600,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.5.sp
+                            ),
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { passwordVisible = !passwordVisible }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // ── Role toggles ──────────────────────────────────────────────
+                Text(
+                    "Your role",
+                    style = SoftType.meta.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Ink2,
+                        fontSize = 12.sp
+                    )
+                )
+                Spacer(Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SiRoleToggle(
+                        label = "I am a student",
+                        checked = form.student,
+                        onCheckedChange = onRegisterStudentChecked
+                    )
+                    SiRoleToggle(
+                        label = "I am a tutor",
+                        checked = form.tutor,
+                        onCheckedChange = onRegisterTutorChecked
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // ── Error / success message ───────────────────────────────────
+                if (state.errorMessage != null) {
+                    Text(
+                        state.errorMessage,
+                        style = SoftType.bodySm.copy(color = Red),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Red.copy(alpha = 0.08f))
+                            .padding(12.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                if (state.infoMessage != null) {
+                    Text(
+                        state.infoMessage,
+                        style = SoftType.bodySm.copy(color = Green),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Green.copy(alpha = 0.08f))
+                            .padding(12.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // ── Create account button ─────────────────────────────────────
+                SoftButton(
+                    text = if (state.isBusy) "Creating account..." else "Create account",
+                    onClick = onRegisterClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = SoftIcons.arrow,
+                    enabled = !state.isBusy
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // ── Footer link back to sign-in ───────────────────────────────
+                Text(
+                    buildAnnotatedString {
+                        append("Already have an account? ")
+                        withStyle(SpanStyle(color = Primary600, fontWeight = FontWeight.Bold)) {
+                            append("Sign in")
+                        }
+                    },
+                    style = SoftType.meta,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onOpenLogin() }
+                )
+            }
         }
+    }
+}
 
-        MessageBanner(state)
-
-        AppPrimaryButton(
-            text = if (state.isBusy) "Creating account..." else "Register",
-            onClick = onRegisterClick,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !state.isBusy,
-            leadingIcon = { Icon(Icons.Rounded.Check, contentDescription = null, tint = CardWhite, modifier = Modifier.size(16.dp)) }
+@Composable
+private fun SiRoleToggle(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .softShadow(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(CardSurface)
+            .border(1.dp, if (checked) Primary.copy(alpha = 0.35f) else Line2, RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onCheckedChange(!checked) }
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (checked) Primary else Line2),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(
+                    imageVector = SoftIcons.check,
+                    contentDescription = null,
+                    tint = White,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+        }
+        Text(
+            label,
+            style = SoftType.meta.copy(
+                fontWeight = FontWeight.SemiBold,
+                color = if (checked) InkToken else Ink2,
+                fontSize = 14.sp
+            )
         )
-
-        AppDangerButton("Back to sign in", onClick = onOpenLogin, modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy)
     }
 }
 

@@ -100,7 +100,7 @@ fun EarningsTab(state: SmartCampusUiState, onBack: () -> Unit) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 20.dp, end = 20.dp, bottom = 24.dp
+                start = 20.dp, end = 20.dp, bottom = 100.dp
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {

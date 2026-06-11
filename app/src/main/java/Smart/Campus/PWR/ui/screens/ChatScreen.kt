@@ -222,7 +222,7 @@ fun ChatTab(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            contentPadding = PaddingValues(bottom = 100.dp)
         ) {
             // Course channels section (hidden when DIRECT filter active)
             if (chat.inboxFilter != ChatInboxFilter.DIRECT) {
