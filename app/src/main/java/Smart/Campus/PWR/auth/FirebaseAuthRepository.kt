@@ -30,17 +30,17 @@ class FirebaseAuthRepository(
         val mappedEmail = AuthMapping.aliasToEmail(loginOrEmail)
 
         return try {
-            withTimeout(AUTH_TIMEOUT_MS) {
-                try {
+            try {
+                withTimeout(AUTH_TIMEOUT_MS) {
                     auth.signInWithEmailAndPassword(mappedEmail, password).await()
-                } catch (error: Throwable) {
-                    Log.e(TAG, "Sign in failed for $mappedEmail", error)
-                    throw error
                 }
+            } catch (error: Throwable) {
+                Log.e(TAG, "Sign in failed for $mappedEmail", error)
+                throw error
+            }
 
-                requireNotNull(getCurrentUser()) {
-                    "Logged user profile is missing."
-                }
+            requireNotNull(getCurrentUser()) {
+                "Logged user profile is missing."
             }
         } catch (error: TimeoutCancellationException) {
             Log.e(TAG, "Sign in timed out for $mappedEmail", error)
@@ -279,7 +279,13 @@ class FirebaseAuthRepository(
                 FirebaseFunctionsException.Code.UNAVAILABLE -> "Functions backend is temporarily unavailable."
                 else -> "Functions error: ${error.code.name}"
             }
-            is FirebaseFirestoreException -> "Firestore error: ${error.code.name}"
+            is FirebaseFirestoreException -> {
+                val detail = error.message
+                    ?.substringBefore('\n')
+                    ?.takeIf { it.isNotBlank() }
+                listOfNotNull("Firestore error: ${error.code.name}", detail)
+                    .joinToString(" - ")
+            }
             else -> error.message ?: "Unexpected error occurred."
         }
     }

@@ -60,6 +60,23 @@ async function notifyUser(uid, type, title, body, data) {
   await sendPushToUser(uid, title, body, { type, ...(data || {}) });
 }
 
+function chatMessagePreview(message) {
+  const text = typeof message.text === "string" ? message.text.trim() : "";
+  if (text) {
+    return text;
+  }
+  const attachment = message.attachment && typeof message.attachment === "object" ? message.attachment : {};
+  const mimeType = typeof attachment.mimeType === "string" ? attachment.mimeType : "";
+  if (message.messageType === "image" || mimeType.startsWith("image/")) {
+    return "Photo";
+  }
+  const fileName = typeof attachment.fileName === "string" ? attachment.fileName.trim() : "";
+  if (fileName) {
+    return `File: ${fileName}`;
+  }
+  return "Message";
+}
+
 function ensureAdminCaller(request) {
   if (!request.auth || request.auth.token.admin !== true) {
     throw new HttpsError("permission-denied", "Only admin can call this function.");
@@ -451,8 +468,19 @@ exports.onCourseMessageCreated = onDocumentCreated(
       return;
     }
     const courseId = event.params.courseId;
-    const courseSnap = await db.collection("courses").doc(courseId).get();
+    const messageId = event.params.messageId;
+    const courseRef = db.collection("courses").doc(courseId);
+    const courseSnap = await courseRef.get();
     const course = courseSnap.data() || {};
+    const preview = chatMessagePreview(message);
+    await courseRef.update({
+      lastMessageText: preview,
+      lastMessageSenderName: message.senderName || "",
+      lastMessageSenderUid: message.senderUid || "",
+      lastMessageIsAnnouncement: message.isAnnouncement === true,
+      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     const membersSnap = await db.collection("courses").doc(courseId).collection("members").get();
     const recipients = new Set(membersSnap.docs.map((doc) => doc.id));
     if (course.tutorUid) {
@@ -464,11 +492,11 @@ exports.onCourseMessageCreated = onDocumentCreated(
     const title = isAnnouncement
       ? `Announcement: ${course.name || "Course"}`
       : `${course.name || "Course"}: ${message.senderName}`;
-    const body = message.text || "";
+    const body = preview;
 
     await Promise.all(
       [...recipients].map((uid) =>
-        notifyUser(uid, isAnnouncement ? "announcement" : "chat", title, body, { courseId })
+        notifyUser(uid, isAnnouncement ? "announcement" : "chat", title, body, { courseId, messageId })
       )
     );
   }
@@ -482,12 +510,15 @@ exports.onDirectMessageCreated = onDocumentCreated(
       return;
     }
     const conversationId = event.params.conversationId;
+    const messageId = event.params.messageId;
     const conversationRef = db.collection("conversations").doc(conversationId);
     const conversation = (await conversationRef.get()).data() || {};
+    const preview = chatMessagePreview(message);
 
     await conversationRef.update({
-      lastMessageText: message.text || "",
+      lastMessageText: preview,
       lastMessageSenderName: message.senderName || "",
+      lastMessageSenderUid: message.senderUid || "",
       lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -496,8 +527,9 @@ exports.onDirectMessageCreated = onDocumentCreated(
       participants
         .filter((uid) => uid !== message.senderUid)
         .map((uid) =>
-          notifyUser(uid, "chat", `Message from ${message.senderName}`, message.text || "", {
+          notifyUser(uid, "chat", `Message from ${message.senderName}`, preview, {
             conversationId,
+            messageId,
           })
         )
     );

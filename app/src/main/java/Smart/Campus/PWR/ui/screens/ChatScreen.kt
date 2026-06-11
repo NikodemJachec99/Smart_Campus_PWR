@@ -5,6 +5,7 @@ import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
 import Smart.Campus.PWR.ui.components.softindigo.Chip
 import Smart.Campus.PWR.ui.components.softindigo.ImagePlaceholder
 import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
+import Smart.Campus.PWR.ui.components.MessageBlock
 import Smart.Campus.PWR.ui.components.softindigo.SearchField
 import Smart.Campus.PWR.ui.components.softindigo.SoftButton
 import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
@@ -125,7 +126,15 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
-private val allowedChatMimeTypes = arrayOf("image/jpeg", "image/png", "image/webp", "application/pdf")
+private val allowedChatMimeTypes = arrayOf(
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "application/pdf"
+)
 
 // ─── ChatTab ─────────────────────────────────────────────────────────────────
 
@@ -181,6 +190,8 @@ fun ChatTab(
                 SoftIconButton(icon = SoftIcons.search, onClick = { /* DESIGN-PLACEHOLDER: expand search */ })
             }
         )
+
+        MessageBlock(state.errorMessage, state.infoMessage)
 
         // Filter chips row
         Row(
@@ -425,7 +436,7 @@ fun ConversationScreen(
             val file = context.readChatFile(uri)
             when {
                 file == null -> pickError = "Could not read selected file."
-                file.mimeType !in allowedChatMimeTypes -> pickError = "Use PDF, JPEG, PNG or WebP."
+                file.mimeType !in allowedChatMimeTypes -> pickError = "Use PDF, JPEG, PNG, WebP, HEIC or HEIF."
                 file.sizeBytes !in 1 until 10 * 1024 * 1024 -> pickError = "File must be smaller than 10 MB."
                 else -> {
                     pickError = null
@@ -1602,6 +1613,8 @@ private fun inferMimeType(fileName: String): String = when (fileName.substringAf
     "jpg", "jpeg" -> "image/jpeg"
     "png" -> "image/png"
     "webp" -> "image/webp"
+    "heic" -> "image/heic"
+    "heif" -> "image/heif"
     "pdf" -> "application/pdf"
     else -> "application/octet-stream"
 }

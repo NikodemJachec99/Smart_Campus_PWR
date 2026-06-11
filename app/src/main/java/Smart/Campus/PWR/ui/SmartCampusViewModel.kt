@@ -23,6 +23,7 @@ import Smart.Campus.PWR.tutoring.TutoringRepository
 import Smart.Campus.PWR.ui.state.AdminUserInspectorUi
 import Smart.Campus.PWR.ui.state.AppScreen
 import Smart.Campus.PWR.ui.state.AssignmentFormState
+import Smart.Campus.PWR.ui.state.AssignmentUi
 import Smart.Campus.PWR.ui.state.AvailabilityFormState
 import Smart.Campus.PWR.ui.state.ChatAttachmentUi
 import Smart.Campus.PWR.ui.state.ChatContactUi
@@ -49,6 +50,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +66,9 @@ class SmartCampusViewModel(
     private val chatRepository: ChatRepository = ChatRepository(),
     private val notificationRepository: NotificationRepository = NotificationRepository()
 ) : ViewModel() {
+    private companion object {
+        const val TAG = "SmartCampusViewModel"
+    }
 
     private val _uiState = MutableStateFlow(SmartCampusUiState())
     val uiState: StateFlow<SmartCampusUiState> = _uiState.asStateFlow()
@@ -75,12 +80,17 @@ class SmartCampusViewModel(
     private var messagesRealtime: ListenerRegistration? = null
     private var typingRealtime: ListenerRegistration? = null
     private var notificationsRealtime: ListenerRegistration? = null
+    private var mySubmissionAssignmentIds: List<String> = emptyList()
     private val readReceiptInFlight = mutableSetOf<String>()
     private val readReceiptBackoffUntil = mutableMapOf<String, Long>()
     private var lastTypingSentAtMillis = 0L
 
     init {
         bootstrapSession()
+    }
+
+    private fun showRealtimeError(area: String, error: Throwable) {
+        _uiState.update { it.copy(errorMessage = "$area: ${authRepository.userMessage(error)}") }
     }
 
     fun onLoginChanged(value: String) {
@@ -1368,6 +1378,7 @@ class SmartCampusViewModel(
                     )
                 }
             } catch (error: Throwable) {
+                Log.e(TAG, "Sending chat message failed", error)
                 _uiState.update { state ->
                     state.copy(
                         chat = state.chat.copy(
@@ -1456,6 +1467,7 @@ class SmartCampusViewModel(
                     )
                 }
             } catch (error: Throwable) {
+                Log.e(TAG, "Retrying chat message failed", error)
                 _uiState.update { state ->
                     state.copy(
                         chat = state.chat.copy(
@@ -1923,7 +1935,12 @@ class SmartCampusViewModel(
             }.distinct()
             val assignments = runCatching { assignmentRepository.loadAssignmentsForCourses(visibleCourseIds) }.getOrDefault(emptyList())
             val mySubmissions = if (user.hasRole(UserRole.STUDENT)) {
-                runCatching { assignmentRepository.loadMySubmissions(user.uid) }.getOrDefault(emptyList())
+                runCatching {
+                    assignmentRepository.loadMySubmissions(
+                        studentUid = user.uid,
+                        assignmentIds = assignments.map { it.id }
+                    )
+                }.getOrDefault(emptyList())
             } else emptyList()
             _uiState.update { state ->
                 state.copy(
@@ -2105,7 +2122,7 @@ class SmartCampusViewModel(
                 loadChatContacts(user)
             },
             onError = { error ->
-                _uiState.update { it.copy(errorMessage = authRepository.userMessage(error)) }
+                showRealtimeError("Dashboard realtime", error)
             }
         )
 
@@ -2116,9 +2133,10 @@ class SmartCampusViewModel(
                 _uiState.update {
                     it.copy(dashboardState = it.dashboardState.copy(assignments = assignments))
                 }
+                restartMySubmissionsRealtime(user, assignments)
             },
             onError = { error ->
-                _uiState.update { it.copy(errorMessage = authRepository.userMessage(error)) }
+                showRealtimeError("Assignments realtime", error)
             }
         )
 
@@ -2136,7 +2154,9 @@ class SmartCampusViewModel(
                     markActiveConversationRead()
                 }
             },
-            onError = { /* non-blocking: catalog simply stays empty if unavailable */ }
+            onError = { error ->
+                showRealtimeError("Course catalog", error)
+            }
         )
 
         conversationsRealtime = chatRepository.listenDirectConversations(
@@ -2148,7 +2168,9 @@ class SmartCampusViewModel(
                     markActiveConversationRead()
                 }
             },
-            onError = { /* non-blocking: conversation list stays empty if unavailable */ }
+            onError = { error ->
+                showRealtimeError("Direct conversations", error)
+            }
         )
 
         notificationsRealtime = notificationRepository.listenMine(
@@ -2163,24 +2185,41 @@ class SmartCampusViewModel(
                     )
                 }
             },
-            onError = { /* non-blocking: notifications require deployed Cloud Functions */ }
+            onError = { error ->
+                showRealtimeError("Notifications", error)
+            }
         )
 
-        mySubmissionsRealtime = if (user.hasRole(UserRole.STUDENT)) {
-            assignmentRepository.listenMySubmissions(
-                studentUid = user.uid,
-                onUpdate = { submissions ->
-                    _uiState.update {
-                        it.copy(dashboardState = it.dashboardState.copy(mySubmissions = submissions))
-                    }
-                },
-                onError = { /* non-blocking: submissions simply won't refresh live */ }
-            )
-        } else {
-            null
-        }
+        restartMySubmissionsRealtime(user, _uiState.value.dashboardState.assignments)
 
         loadChatContacts(user)
+    }
+
+    private fun restartMySubmissionsRealtime(user: AppUser, assignments: List<AssignmentUi>) {
+        if (!user.hasRole(UserRole.STUDENT)) {
+            mySubmissionsRealtime?.remove()
+            mySubmissionsRealtime = null
+            mySubmissionAssignmentIds = emptyList()
+            return
+        }
+
+        val assignmentIds = assignments.map { it.id }.distinct().sorted()
+        if (assignmentIds == mySubmissionAssignmentIds) return
+
+        mySubmissionsRealtime?.remove()
+        mySubmissionAssignmentIds = assignmentIds
+        mySubmissionsRealtime = assignmentRepository.listenMySubmissions(
+            studentUid = user.uid,
+            assignmentIds = assignmentIds,
+            onUpdate = { submissions ->
+                _uiState.update {
+                    it.copy(dashboardState = it.dashboardState.copy(mySubmissions = submissions))
+                }
+            },
+            onError = { error ->
+                showRealtimeError("My submissions", error)
+            }
+        )
     }
 
     private fun loadChatContacts(user: AppUser) {
@@ -2221,6 +2260,7 @@ class SmartCampusViewModel(
         messagesRealtime?.remove()
         typingRealtime?.remove()
         notificationsRealtime?.remove()
+        mySubmissionAssignmentIds = emptyList()
         tutoringRealtime = null
         assignmentsRealtime = null
         mySubmissionsRealtime = null

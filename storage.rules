@@ -13,6 +13,18 @@ service firebase.storage {
       return /databases/(default)/documents/assignments/$(assignmentId);
     }
 
+    function conversationPath(conversationId) {
+      return /databases/(default)/documents/conversations/$(conversationId);
+    }
+
+    function coursePath(courseId) {
+      return /databases/(default)/documents/courses/$(courseId);
+    }
+
+    function courseMemberPath(courseId) {
+      return /databases/(default)/documents/courses/$(courseId)/members/$(request.auth.uid);
+    }
+
     function rolesList() {
       return isSignedIn() && firestore.exists(userPath()) && firestore.get(userPath()).data.roles is list
         ? firestore.get(userPath()).data.roles
@@ -40,12 +52,53 @@ service firebase.storage {
       );
     }
 
+    function allowedChatMimeTypes() {
+      return ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    }
+
+    function canReadDirectChat(conversationId) {
+      return isSignedIn()
+        && firestore.exists(conversationPath(conversationId))
+        && request.auth.uid in firestore.get(conversationPath(conversationId)).data.participants;
+    }
+
+    function canReadCourseChat(courseId) {
+      return isSignedIn()
+        && firestore.exists(coursePath(courseId))
+        && (
+          firestore.get(coursePath(courseId)).data.tutorUid == request.auth.uid
+          || firestore.exists(courseMemberPath(courseId))
+        );
+    }
+
+    function canWriteChatAttachment(senderUid) {
+      return isSignedIn()
+        && request.auth.uid == senderUid
+        && request.resource.size > 0
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType in allowedChatMimeTypes();
+    }
+
     match /submissions/{assignmentId}/{studentUid}/{fileName} {
       allow read: if canReadSubmission(assignmentId, studentUid);
       allow create, update: if isSignedIn()
         && request.auth.uid == studentUid
         && request.resource.size < 10 * 1024 * 1024;
       allow delete: if isSignedIn() && (request.auth.uid == studentUid || hasRole('admin'));
+    }
+
+    match /chat/direct/{conversationId}/{senderUid}/{clientMessageId}/{fileName} {
+      allow read: if canReadDirectChat(conversationId) || hasRole('admin');
+      allow create, update: if canReadDirectChat(conversationId)
+        && canWriteChatAttachment(senderUid);
+      allow delete: if isSignedIn() && (request.auth.uid == senderUid || hasRole('admin'));
+    }
+
+    match /chat/courses/{courseId}/{senderUid}/{clientMessageId}/{fileName} {
+      allow read: if canReadCourseChat(courseId) || hasRole('admin');
+      allow create, update: if canReadCourseChat(courseId)
+        && canWriteChatAttachment(senderUid);
+      allow delete: if isSignedIn() && (request.auth.uid == senderUid || hasRole('admin'));
     }
 
     match /{allPaths=**} {

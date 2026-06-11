@@ -174,30 +174,73 @@ class AssignmentRepository(
         )
     }
 
-    suspend fun loadMySubmissions(studentUid: String): List<SubmissionUi> {
-        val snapshot = firestore
-            .collectionGroup("submissions")
-            .whereEqualTo("studentUid", studentUid)
-            .get()
-            .await()
-        return snapshot.documents.mapNotNull { mapSubmission(it) }
+    suspend fun loadMySubmissions(studentUid: String, assignmentIds: List<String>): List<SubmissionUi> {
+        return assignmentIds.distinct().flatMap { assignmentId ->
+            val snapshot = firestore
+                .collection("assignments")
+                .document(assignmentId)
+                .collection("submissions")
+                .whereEqualTo("studentUid", studentUid)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { mapSubmission(it) }
+        }
     }
 
     fun listenMySubmissions(
         studentUid: String,
+        assignmentIds: List<String>,
         onUpdate: (List<SubmissionUi>) -> Unit,
         onError: (Throwable) -> Unit
-    ): ListenerRegistration {
-        return firestore
-            .collectionGroup("submissions")
-            .whereEqualTo("studentUid", studentUid)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    onError(error)
-                } else {
-                    onUpdate(snapshot?.documents.orEmpty().mapNotNull { mapSubmission(it) })
+    ): ListenerRegistration? {
+        val uniqueAssignmentIds = assignmentIds.distinct().filter { it.isNotBlank() }
+        if (uniqueAssignmentIds.isEmpty()) {
+            onUpdate(emptyList())
+            return null
+        }
+
+        val registrations = mutableListOf<ListenerRegistration>()
+        val submissionsByAssignment = mutableMapOf<String, SubmissionUi>()
+        val pendingInitialSnapshots = uniqueAssignmentIds.toMutableSet()
+        val lock = Any()
+
+        uniqueAssignmentIds.forEach { assignmentId ->
+            val registration = firestore
+                .collection("assignments")
+                .document(assignmentId)
+                .collection("submissions")
+                .whereEqualTo("studentUid", studentUid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                        return@addSnapshotListener
+                    }
+
+                    val submission = snapshot
+                        ?.documents
+                        .orEmpty()
+                        .mapNotNull { mapSubmission(it) }
+                        .firstOrNull()
+
+                    synchronized(lock) {
+                        if (submission == null) {
+                            submissionsByAssignment.remove(assignmentId)
+                        } else {
+                            submissionsByAssignment[assignmentId] = submission
+                        }
+                        pendingInitialSnapshots.remove(assignmentId)
+                        if (pendingInitialSnapshots.isEmpty()) {
+                            onUpdate(submissionsByAssignment.values.toList())
+                        }
+                    }
                 }
-            }
+            registrations += registration
+        }
+
+        return ListenerRegistration {
+            registrations.forEach { it.remove() }
+        }
     }
 
     suspend fun loadSubmissionsForAssignment(assignmentId: String): List<SubmissionUi> {
