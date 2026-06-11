@@ -171,7 +171,7 @@ fun CourseMaterialsScreen(
             )
         }
 
-        pickError?.let { error ->
+        (pickError ?: state.errorMessage)?.let { error ->
             Text(
                 text = error,
                 color = Red,

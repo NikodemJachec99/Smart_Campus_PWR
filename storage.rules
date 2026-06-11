@@ -1,4 +1,6 @@
 rules_version = '2';
+// Cross-service rules: the Cloud Storage service agent needs the
+// roles/firebaserules.firestoreServiceAgent role to read Firestore.
 service firebase.storage {
   match /b/{bucket}/o {
     function isSignedIn() {
