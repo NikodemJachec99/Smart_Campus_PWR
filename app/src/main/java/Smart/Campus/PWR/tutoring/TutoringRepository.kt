@@ -129,6 +129,7 @@ class TutoringRepository(
             "location" to location,
             "meetingUrl" to meetingUrl,
             "topic" to topic,
+            "status" to "open",
             "createdAt" to FieldValue.serverTimestamp()
         )
 
@@ -309,8 +310,9 @@ class TutoringRepository(
                 throw IllegalStateException("Permission denied.")
             }
 
-            if (bookingSnapshot.getString("status") != "booked") {
-                throw IllegalStateException("Only booked lessons can be cancelled.")
+            val currentStatus = BookingRules.normalizeLegacyStatus(bookingSnapshot.getString("status"))
+            if (currentStatus !in listOf("CONFIRMED", "PENDING")) {
+                throw IllegalStateException("Only active lessons can be cancelled.")
             }
 
             val availabilityId = bookingSnapshot.getString("availabilityId").orEmpty().ifBlank { slotId }
@@ -339,7 +341,8 @@ class TutoringRepository(
                     "isBooked" to false,
                     "bookingId" to FieldValue.delete(),
                     "bookedBy" to FieldValue.delete(),
-                    "bookedAt" to FieldValue.delete()
+                    "bookedAt" to FieldValue.delete(),
+                    "status" to "open"
                 )
             )
         }.await()
@@ -369,9 +372,11 @@ class TutoringRepository(
                 throw IllegalStateException("This availability slot no longer exists.")
             }
 
+            val isBooked = slotSnapshot.getBoolean("isBooked") == true
+            val status = slotSnapshot.getString("status") ?: "open"
             val slotStatus = slotSnapshot.getString("slotStatus") ?: "open"
-            if (slotStatus != "open") {
-                throw IllegalStateException("This slot is not available for booking (status: $slotStatus).")
+            if (isBooked || status !in listOf("open", "") || slotStatus != "open") {
+                throw IllegalStateException("This slot is not available for booking.")
             }
 
             val tutorId = slotSnapshot.getString("tutorId").orEmpty()
@@ -387,8 +392,11 @@ class TutoringRepository(
             val format = slotSnapshot.getString("format") ?: "ONLINE"
             val location = slotSnapshot.getString("location") ?: ""
             val meetingUrl = slotSnapshot.getString("meetingUrl") ?: ""
-            val durationMinutes = slotSnapshot.getLong("durationMinutes")?.toInt() ?: 60
             val slotTopic = topic.ifBlank { slotSnapshot.getString("topic") ?: "" }
+            val notes = buildList {
+                if (slotTopic.isNotBlank()) add("Topic: $slotTopic")
+                if (message.trim().isNotBlank()) add(message.trim())
+            }.joinToString(separator = "\n\n")
 
             val (lessonStartsAt, lessonEndsAt) = parseRequiredLessonWindow(date, startHour, endHour)
             requireFutureWindow(lessonStartsAt)
@@ -396,9 +404,13 @@ class TutoringRepository(
             transaction.update(
                 slotRef,
                 mapOf(
-                    "slotStatus" to "pending",
-                    "pendingBookingId" to bookingRef.id,
-                    "pendingStudentId" to student.uid
+                    "isBooked" to true,
+                    "bookingId" to bookingRef.id,
+                    "bookedBy" to student.uid,
+                    "bookedAt" to FieldValue.serverTimestamp(),
+                    "startAt" to lessonStartsAt.toFirebaseTimestamp(),
+                    "endAt" to lessonEndsAt.toFirebaseTimestamp(),
+                    "status" to "pending"
                 )
             )
 
@@ -415,14 +427,14 @@ class TutoringRepository(
                 "format" to format,
                 "location" to location,
                 "meetingUrl" to meetingUrl,
-                "durationMinutes" to durationMinutes,
-                "topic" to slotTopic,
-                "requestMessage" to message.trim(),
                 "status" to "PENDING",
                 "lessonStartsAt" to lessonStartsAt.toFirebaseTimestamp(),
                 "lessonEndsAt" to lessonEndsAt.toFirebaseTimestamp(),
                 "createdAt" to FieldValue.serverTimestamp()
             )
+            if (notes.isNotBlank()) {
+                bookingPayload["notes"] = notes
+            }
             transaction.set(bookingRef, bookingPayload)
         }.await()
     }
@@ -459,7 +471,7 @@ class TutoringRepository(
                 bookingRef,
                 mapOf(
                     "status" to "CONFIRMED",
-                    "confirmedAt" to FieldValue.serverTimestamp()
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
 
@@ -467,10 +479,8 @@ class TutoringRepository(
                 transaction.update(
                     slotRef,
                     mapOf(
-                        "slotStatus" to "booked",
-                        "isBooked" to true,
-                        "bookingId" to bookingId,
-                        "bookedBy" to bookingSnapshot.getString("studentId").orEmpty()
+                        "status" to "booked",
+                        "updatedAt" to FieldValue.serverTimestamp()
                     )
                 )
             }
@@ -512,9 +522,8 @@ class TutoringRepository(
                 bookingRef,
                 mapOf(
                     "status" to "DECLINED",
-                    "cancelReason" to normalizedReason,
-                    "cancelledBy" to tutor.uid,
-                    "cancelledAt" to FieldValue.serverTimestamp()
+                    "updatedAt" to FieldValue.serverTimestamp(),
+                    "tutorNote" to normalizedReason
                 )
             )
 
@@ -522,9 +531,11 @@ class TutoringRepository(
                 transaction.update(
                     slotRef,
                     mapOf(
-                        "slotStatus" to "open",
-                        "pendingBookingId" to FieldValue.delete(),
-                        "pendingStudentId" to FieldValue.delete()
+                        "isBooked" to false,
+                        "bookingId" to FieldValue.delete(),
+                        "bookedBy" to FieldValue.delete(),
+                        "bookedAt" to FieldValue.delete(),
+                        "status" to "open"
                     )
                 )
             }
@@ -1214,6 +1225,8 @@ class TutoringRepository(
         val endHour = document.get("endHour")?.toString() ?: return null
         val availabilityId = document.getString("availabilityId").orEmpty()
 
+        val notes = document.getString("notes").orEmpty()
+
         return LessonBookingUi(
             id = document.id,
             availabilityId = availabilityId,
@@ -1232,8 +1245,8 @@ class TutoringRepository(
             format = document.getString("format") ?: "ONLINE",
             location = document.getString("location") ?: "",
             meetingUrl = document.getString("meetingUrl") ?: "",
-            topic = document.getString("topic") ?: "",
-            requestMessage = document.getString("requestMessage") ?: ""
+            topic = document.getString("topic") ?: notes,
+            requestMessage = document.getString("requestMessage") ?: notes
         )
     }
 

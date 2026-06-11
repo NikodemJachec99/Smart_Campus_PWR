@@ -117,7 +117,7 @@ private sealed class StudentStep {
     object Find : StudentStep()
     object Results : StudentStep()
     data class Profile(val tutorId: String, val tutorName: String) : StudentStep()
-    data class Booking(val tutorId: String, val tutorName: String) : StudentStep()
+    data class Booking(val tutorId: String, val tutorName: String, val initialDate: String) : StudentStep()
     data class Confirm(val slotId: String, val slot: TutorAvailabilityUi) : StudentStep()
 }
 
@@ -245,12 +245,13 @@ private fun StudentFindFlow(
             tutorId = s.tutorId,
             tutorName = s.tutorName,
             onBack = { step = StudentStep.Results },
-            onBook = { step = StudentStep.Booking(s.tutorId, s.tutorName) }
+            onBook = { selectedDate -> step = StudentStep.Booking(s.tutorId, s.tutorName, selectedDate) }
         )
         is StudentStep.Booking -> ScreenBooking(
             state = state,
             tutorId = s.tutorId,
             tutorName = s.tutorName,
+            initialDate = s.initialDate,
             onBack = { step = StudentStep.Profile(s.tutorId, s.tutorName) },
             onStartBookingRequest = onStartBookingRequest,
             onBookingRequestMessageChanged = onBookingRequestMessageChanged,
@@ -264,6 +265,13 @@ private fun StudentFindFlow(
         is StudentStep.Confirm -> ScreenBookingConfirm(
             state = state,
             slot = s.slot,
+            onBackToBooking = {
+                step = StudentStep.Booking(
+                    tutorId = s.slot.tutorId,
+                    tutorName = s.slot.tutorDisplayName,
+                    initialDate = s.slot.dateLabel
+                )
+            },
             onClose = { step = StudentStep.Find }
         )
     }
@@ -797,7 +805,7 @@ private fun ScreenTutorProfile(
     tutorId: String,
     tutorName: String,
     onBack: () -> Unit,
-    onBook: () -> Unit
+    onBook: (String) -> Unit
 ) {
     val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId) {
         state.dashboardState.availableTutorSlots.filter { it.tutorId == tutorId }
@@ -814,18 +822,11 @@ private fun ScreenTutorProfile(
         state.dashboardState.reviewsForMe.filter { it.tutorId == tutorId }.take(3)
     }
 
-    // DayStrip data: unique dates from tutor's open slots
-    val today = LocalDate.now()
-    val isoFmt = DateTimeFormatter.ISO_LOCAL_DATE
-    val dowFmt = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
-    val dayCells = (0..5).map { offset ->
-        val date = today.plusDays(offset.toLong())
-        val label = date.format(isoFmt)
-        val slotCount = tutorSlots.count { it.dateLabel == label }
-        Triple(date.format(dowFmt), date.dayOfMonth.toString(), slotCount)
+    val dayCells = remember(tutorSlots) { tutorSlotDays(tutorSlots) }
+    var selectedDate by remember(tutorId) { mutableStateOf(dayCells.firstOrNull()?.dateLabel.orEmpty()) }
+    LaunchedEffect(tutorId, dayCells) {
+        selectedDate = dayCells.firstOrNull()?.dateLabel.orEmpty()
     }
-
-    var selectedDayIndex by remember { mutableStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize().background(Bg)) {
         Column(
@@ -975,17 +976,31 @@ private fun ScreenTutorProfile(
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 SectionHead(title = "Pick a day")
                 Spacer(Modifier.height(12.dp))
-                DayStrip {
-                    dayCells.forEachIndexed { idx, (dow, dayNum, slotCount) ->
-                        DayCell(
-                            dow = dow,
-                            dayNum = dayNum,
-                            slotLabel = if (slotCount > 0) "$slotCount slot" else "–",
-                            selected = idx == selectedDayIndex,
-                            enabled = slotCount > 0 || idx == selectedDayIndex,
-                            onClick = { selectedDayIndex = idx }
-                        )
+                if (dayCells.isEmpty()) {
+                    CardFlat {
+                        Text("No available dates for this tutor.", style = SoftType.bodySm)
                     }
+                } else {
+                    DayStrip {
+                        dayCells.forEach { day ->
+                            DayCell(
+                                dow = day.dow,
+                                dayNum = day.dayNum,
+                                slotLabel = "${day.slotCount} slot${if (day.slotCount == 1) "" else "s"}",
+                                selected = day.dateLabel == selectedDate,
+                                enabled = day.slotCount > 0,
+                                onClick = { selectedDate = day.dateLabel }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    SoftButton(
+                        text = "Choose time",
+                        onClick = { if (selectedDate.isNotBlank()) onBook(selectedDate) },
+                        enabled = selectedDate.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = SoftIcons.arrow
+                    )
                 }
             }
 
@@ -1053,7 +1068,8 @@ private fun ScreenTutorProfile(
         ) {
             SoftButton(
                 text = "Book a session",
-                onClick = onBook,
+                onClick = { if (selectedDate.isNotBlank()) onBook(selectedDate) },
+                enabled = selectedDate.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = SoftIcons.arrow
             )
@@ -1068,6 +1084,7 @@ private fun ScreenBooking(
     state: SmartCampusUiState,
     tutorId: String,
     tutorName: String,
+    initialDate: String,
     onBack: () -> Unit,
     onStartBookingRequest: (String) -> Unit,
     onBookingRequestMessageChanged: (String) -> Unit,
@@ -1075,22 +1092,23 @@ private fun ScreenBooking(
     onConfirm: (String, TutorAvailabilityUi) -> Unit
 ) {
     val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId) {
-        state.dashboardState.availableTutorSlots.filter { it.tutorId == tutorId }
+        state.dashboardState.availableTutorSlots
+            .filter { it.tutorId == tutorId }
+            .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
     }
 
-    // Available dates
-    val today = LocalDate.now()
-    val isoFmt = DateTimeFormatter.ISO_LOCAL_DATE
-    val dowFmt = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
-    val days = (0..5).map { offset ->
-        val date = today.plusDays(offset.toLong())
-        date.format(isoFmt) to Pair(date.format(dowFmt), date.dayOfMonth.toString())
-    }
+    val days = remember(tutorSlots) { tutorSlotDays(tutorSlots) }
 
-    var selectedDateIndex by remember { mutableStateOf(0) }
+    var selectedDate by remember(tutorId, initialDate) { mutableStateOf(initialDate) }
     var selectedSlotId by remember { mutableStateOf<String?>(null) }
 
-    val selectedDate = days.getOrNull(selectedDateIndex)?.first ?: ""
+    LaunchedEffect(tutorId, initialDate, days) {
+        selectedDate = initialDate.takeIf { date ->
+            days.any { it.dateLabel == date }
+        } ?: days.firstOrNull()?.dateLabel.orEmpty()
+        selectedSlotId = null
+    }
+
     val slotsForDay = tutorSlots.filter { it.dateLabel == selectedDate }
 
     // Group by morning/afternoon-evening
@@ -1108,6 +1126,11 @@ private fun ScreenBooking(
     val activeSlot = slotsForDay.find { it.id == selectedSlotId } ?: selectedSlot
 
     val bookingRequest = state.bookingRequest
+    val sendBookingRequest: () -> Unit = {
+        activeSlot?.let { slot ->
+            onConfirm(slot.id, slot)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Bg)) {
         Column(
@@ -1168,19 +1191,25 @@ private fun ScreenBooking(
                 // Choose date
                 Text("Choose a date", style = SoftType.h3)
                 Spacer(Modifier.height(12.dp))
-                DayStrip {
-                    days.forEachIndexed { idx, (dateLabel, pair) ->
-                        val hasSlots = tutorSlots.any { it.dateLabel == dateLabel }
-                        DayCell(
-                            dow = pair.first,
-                            dayNum = pair.second,
-                            selected = idx == selectedDateIndex,
-                            enabled = hasSlots,
-                            onClick = {
-                                selectedDateIndex = idx
-                                selectedSlotId = null
-                            }
-                        )
+                if (days.isEmpty()) {
+                    CardFlat {
+                        Text("No available dates for this tutor.", style = SoftType.bodySm)
+                    }
+                } else {
+                    DayStrip {
+                        days.forEach { day ->
+                            DayCell(
+                                dow = day.dow,
+                                dayNum = day.dayNum,
+                                slotLabel = "${day.slotCount} slot${if (day.slotCount == 1) "" else "s"}",
+                                selected = day.dateLabel == selectedDate,
+                                enabled = day.slotCount > 0,
+                                onClick = {
+                                    selectedDate = day.dateLabel
+                                    selectedSlotId = null
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -1354,6 +1383,16 @@ private fun ScreenBooking(
                     placeholder = "Say hi or share context...",
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Spacer(Modifier.height(16.dp))
+
+                SoftButton(
+                    text = "Send booking request",
+                    onClick = sendBookingRequest,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = activeSlot != null,
+                    trailingIcon = SoftIcons.arrow
+                )
             }
         }
 
@@ -1367,12 +1406,8 @@ private fun ScreenBooking(
                 .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
             SoftButton(
-                text = "Review & book",
-                onClick = {
-                    activeSlot?.let { slot ->
-                        onConfirm(slot.id, slot)
-                    }
-                },
+                text = "Send booking request",
+                onClick = sendBookingRequest,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = activeSlot != null,
                 trailingIcon = SoftIcons.arrow
@@ -1387,10 +1422,14 @@ private fun ScreenBooking(
 private fun ScreenBookingConfirm(
     state: SmartCampusUiState,
     slot: TutorAvailabilityUi,
+    onBackToBooking: () -> Unit,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val bookingRequest = state.bookingRequest
+    val isSending = state.isMainSubmitting
+    val errorMessage = state.errorMessage
+    val isError = errorMessage != null
 
     // Parse begin/end millis for calendar intent
     val calendarBeginMillis: Long? = remember(slot.dateLabel, slot.startHour) {
@@ -1414,7 +1453,11 @@ private fun ScreenBookingConfirm(
 
     Box(modifier = Modifier.fillMaxSize().background(Bg)) {
         SoftTopBar(
-            title = "Request sent",
+            title = when {
+                isSending -> "Sending request"
+                isError -> "Request failed"
+                else -> "Request sent"
+            },
             leading = { SoftIconButton(icon = SoftIcons.x, onClick = onClose) }
         )
 
@@ -1438,21 +1481,46 @@ private fun ScreenBookingConfirm(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = SoftIcons.check,
+                    imageVector = if (isError) SoftIcons.x else SoftIcons.check,
                     contentDescription = null,
-                    tint = Primary600,
+                    tint = if (isError) Red else Primary600,
                     modifier = Modifier.size(38.dp)
                 )
             }
 
             Spacer(Modifier.height(16.dp))
 
-            Text("Request sent!", style = SoftType.display)
+            Text(
+                text = when {
+                    isSending -> "Sending request..."
+                    isError -> "Request failed"
+                    else -> "Request sent!"
+                },
+                style = SoftType.display
+            )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Waiting for the tutor to confirm. You'll be notified when they accept.",
+                text = when {
+                    isSending -> "Saving the booking request in Firebase."
+                    isError -> "The request was not saved. Go back and try again."
+                    else -> "Waiting for the tutor to confirm. You'll be notified when they accept."
+                },
                 style = SoftType.body
             )
+
+            if (errorMessage != null) {
+                Spacer(Modifier.height(14.dp))
+                CardFlat {
+                    Text(errorMessage, style = SoftType.bodySm.copy(color = Red))
+                }
+                Spacer(Modifier.height(12.dp))
+                SoftButton(
+                    text = "Back to booking",
+                    onClick = onBackToBooking,
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = SoftButtonVariant.Outline
+                )
+            }
 
             Spacer(Modifier.height(20.dp))
 
@@ -1474,7 +1542,18 @@ private fun ScreenBookingConfirm(
                             Text(slot.tutorDisplayName, style = SoftType.meta.copy(fontSize = 12.sp))
                         }
                     }
-                    Badge(text = "Pending", tone = BadgeTone.Prim)
+                    Badge(
+                        text = when {
+                            isSending -> "Sending"
+                            isError -> "Failed"
+                            else -> "Pending"
+                        },
+                        tone = when {
+                            isSending -> BadgeTone.Gray
+                            isError -> BadgeTone.Red
+                            else -> BadgeTone.Prim
+                        }
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -1559,7 +1638,7 @@ private fun ScreenBookingConfirm(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 variant = SoftButtonVariant.Primary,
-                enabled = calendarBeginMillis != null && calendarEndMillis != null,
+                enabled = !isSending && !isError && calendarBeginMillis != null && calendarEndMillis != null,
                 trailingIcon = SoftIcons.arrow
             )
 
@@ -2044,6 +2123,30 @@ private fun TutorScheduleScreen(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+private data class TutorDayOption(
+    val dateLabel: String,
+    val dow: String,
+    val dayNum: String,
+    val slotCount: Int
+)
+
+private fun tutorSlotDays(slots: List<TutorAvailabilityUi>): List<TutorDayOption> {
+    val dowFmt = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
+    return slots
+        .filter { it.dateLabel.isNotBlank() }
+        .groupBy { it.dateLabel }
+        .toSortedMap()
+        .map { (dateLabel, slotsForDate) ->
+            val parsedDate = runCatching { LocalDate.parse(dateLabel) }.getOrNull()
+            TutorDayOption(
+                dateLabel = dateLabel,
+                dow = parsedDate?.format(dowFmt) ?: dateLabel,
+                dayNum = parsedDate?.dayOfMonth?.toString() ?: dateLabel,
+                slotCount = slotsForDate.size
+            )
+        }
+}
 
 private fun filteredTutorSlots(state: SmartCampusUiState): List<TutorAvailabilityUi> {
     val ratingByTutor = state.dashboardState.tutors
