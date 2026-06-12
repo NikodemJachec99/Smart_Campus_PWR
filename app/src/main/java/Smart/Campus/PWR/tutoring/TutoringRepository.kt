@@ -345,6 +345,333 @@ class TutoringRepository(
         }.await()
     }
 
+    // -------------------------------------------------------------------------
+    // Booking lifecycle: request → accept/decline → reschedule → complete/no-show
+    // -------------------------------------------------------------------------
+
+    /**
+     * Student requests a tutoring slot that is currently `open`.
+     * Slot status transitions: open → pending.
+     * Booking is created with status PENDING.
+     */
+    suspend fun requestBooking(
+        slotId: String,
+        student: AppUser,
+        message: String,
+        topic: String
+    ) {
+        val slotRef = firestore.collection("tutor_availability").document(slotId)
+        val bookingRef = firestore.collection("bookings").document()
+
+        firestore.runTransaction { transaction ->
+            val slotSnapshot = transaction.get(slotRef)
+            if (!slotSnapshot.exists()) {
+                throw IllegalStateException("This availability slot no longer exists.")
+            }
+
+            val slotStatus = slotSnapshot.getString("slotStatus") ?: "open"
+            if (slotStatus != "open") {
+                throw IllegalStateException("This slot is not available for booking (status: $slotStatus).")
+            }
+
+            val tutorId = slotSnapshot.getString("tutorId").orEmpty()
+            if (tutorId == student.uid) {
+                throw IllegalStateException("You cannot book your own tutoring slot.")
+            }
+
+            val tutorDisplayName = slotSnapshot.getString("tutorDisplayName").orEmpty()
+            val subject = slotSnapshot.getString("subject").orEmpty()
+            val date = slotSnapshot.getString("date").orEmpty()
+            val startHour = slotSnapshot.get("startHour")?.toString().orEmpty()
+            val endHour = slotSnapshot.get("endHour")?.toString().orEmpty()
+            val format = slotSnapshot.getString("format") ?: "ONLINE"
+            val location = slotSnapshot.getString("location") ?: ""
+            val meetingUrl = slotSnapshot.getString("meetingUrl") ?: ""
+            val durationMinutes = slotSnapshot.getLong("durationMinutes")?.toInt() ?: 60
+            val slotTopic = topic.ifBlank { slotSnapshot.getString("topic") ?: "" }
+
+            val (lessonStartsAt, lessonEndsAt) = parseRequiredLessonWindow(date, startHour, endHour)
+            requireFutureWindow(lessonStartsAt)
+
+            transaction.update(
+                slotRef,
+                mapOf(
+                    "slotStatus" to "pending",
+                    "pendingBookingId" to bookingRef.id,
+                    "pendingStudentId" to student.uid
+                )
+            )
+
+            val bookingPayload = mutableMapOf<String, Any>(
+                "availabilityId" to slotId,
+                "tutorId" to tutorId,
+                "tutorDisplayName" to tutorDisplayName,
+                "studentId" to student.uid,
+                "studentDisplayName" to student.displayName,
+                "subject" to subject,
+                "date" to date,
+                "startHour" to startHour,
+                "endHour" to endHour,
+                "format" to format,
+                "location" to location,
+                "meetingUrl" to meetingUrl,
+                "durationMinutes" to durationMinutes,
+                "topic" to slotTopic,
+                "requestMessage" to message.trim(),
+                "status" to "PENDING",
+                "lessonStartsAt" to lessonStartsAt.toFirebaseTimestamp(),
+                "lessonEndsAt" to lessonEndsAt.toFirebaseTimestamp(),
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            transaction.set(bookingRef, bookingPayload)
+        }.await()
+    }
+
+    /**
+     * Tutor (or admin) accepts a PENDING booking.
+     * Booking status: PENDING → CONFIRMED.
+     * Slot status: pending → booked.
+     */
+    suspend fun acceptBooking(bookingId: String, tutor: AppUser) {
+        val bookingRef = firestore.collection("bookings").document(bookingId)
+
+        firestore.runTransaction { transaction ->
+            val bookingSnapshot = transaction.get(bookingRef)
+            if (!bookingSnapshot.exists()) {
+                throw IllegalStateException("Booking not found.")
+            }
+
+            val tutorId = bookingSnapshot.getString("tutorId").orEmpty()
+            val isAdmin = tutor.hasRole(UserRole.ADMIN)
+            if (!isAdmin && tutorId != tutor.uid) {
+                throw IllegalStateException("Permission denied.")
+            }
+
+            val currentStatus = bookingSnapshot.getString("status").orEmpty()
+            if (!BookingRules.isPending(currentStatus)) {
+                throw IllegalStateException("Only PENDING bookings can be accepted (current: $currentStatus).")
+            }
+
+            val availabilityId = bookingSnapshot.getString("availabilityId").orEmpty()
+            val slotRef = firestore.collection("tutor_availability").document(availabilityId)
+
+            transaction.update(
+                bookingRef,
+                mapOf(
+                    "status" to "CONFIRMED",
+                    "confirmedAt" to FieldValue.serverTimestamp()
+                )
+            )
+
+            if (availabilityId.isNotBlank()) {
+                transaction.update(
+                    slotRef,
+                    mapOf(
+                        "slotStatus" to "booked",
+                        "isBooked" to true,
+                        "bookingId" to bookingId,
+                        "bookedBy" to bookingSnapshot.getString("studentId").orEmpty()
+                    )
+                )
+            }
+        }.await()
+    }
+
+    /**
+     * Tutor (or admin) declines a PENDING booking.
+     * Booking status: PENDING → DECLINED.
+     * Slot status: pending → open.
+     */
+    suspend fun declineBooking(bookingId: String, tutor: AppUser, reason: String) {
+        val normalizedReason = reason.trim()
+        require(normalizedReason.isNotEmpty()) { "Decline reason is required." }
+
+        val bookingRef = firestore.collection("bookings").document(bookingId)
+
+        firestore.runTransaction { transaction ->
+            val bookingSnapshot = transaction.get(bookingRef)
+            if (!bookingSnapshot.exists()) {
+                throw IllegalStateException("Booking not found.")
+            }
+
+            val tutorId = bookingSnapshot.getString("tutorId").orEmpty()
+            val isAdmin = tutor.hasRole(UserRole.ADMIN)
+            if (!isAdmin && tutorId != tutor.uid) {
+                throw IllegalStateException("Permission denied.")
+            }
+
+            val currentStatus = bookingSnapshot.getString("status").orEmpty()
+            if (!BookingRules.isPending(currentStatus)) {
+                throw IllegalStateException("Only PENDING bookings can be declined (current: $currentStatus).")
+            }
+
+            val availabilityId = bookingSnapshot.getString("availabilityId").orEmpty()
+            val slotRef = firestore.collection("tutor_availability").document(availabilityId)
+
+            transaction.update(
+                bookingRef,
+                mapOf(
+                    "status" to "DECLINED",
+                    "cancelReason" to normalizedReason,
+                    "cancelledBy" to tutor.uid,
+                    "cancelledAt" to FieldValue.serverTimestamp()
+                )
+            )
+
+            if (availabilityId.isNotBlank()) {
+                transaction.update(
+                    slotRef,
+                    mapOf(
+                        "slotStatus" to "open",
+                        "pendingBookingId" to FieldValue.delete(),
+                        "pendingStudentId" to FieldValue.delete()
+                    )
+                )
+            }
+        }.await()
+    }
+
+    /**
+     * Either participant (or admin) reschedules a CONFIRMED booking to a different open slot.
+     * Old slot: booked → open.
+     * New slot: open → booked.
+     * Booking's slot reference and time fields are updated; status stays CONFIRMED.
+     */
+    suspend fun rescheduleBooking(bookingId: String, newSlotId: String, user: AppUser) {
+        require(bookingId.isNotEmpty()) { "Booking ID cannot be empty." }
+        require(newSlotId.isNotEmpty()) { "New slot ID cannot be empty." }
+
+        val bookingRef = firestore.collection("bookings").document(bookingId)
+        val newSlotRef = firestore.collection("tutor_availability").document(newSlotId)
+
+        firestore.runTransaction { transaction ->
+            val bookingSnapshot = transaction.get(bookingRef)
+            if (!bookingSnapshot.exists()) {
+                throw IllegalStateException("Booking not found.")
+            }
+
+            val studentId = bookingSnapshot.getString("studentId").orEmpty()
+            val tutorId = bookingSnapshot.getString("tutorId").orEmpty()
+            val isParticipant = studentId == user.uid || tutorId == user.uid
+            if (!isParticipant && !user.hasRole(UserRole.ADMIN)) {
+                throw IllegalStateException("Permission denied.")
+            }
+
+            val newSlotSnapshot = transaction.get(newSlotRef)
+            if (!newSlotSnapshot.exists()) {
+                throw IllegalStateException("New slot not found.")
+            }
+
+            val newSlotStatus = newSlotSnapshot.getString("slotStatus") ?: "open"
+            if (newSlotStatus != "open") {
+                throw IllegalStateException("New slot is not available (status: $newSlotStatus).")
+            }
+
+            // Release the old slot
+            val oldAvailabilityId = bookingSnapshot.getString("availabilityId").orEmpty()
+            if (oldAvailabilityId.isNotBlank() && oldAvailabilityId != newSlotId) {
+                val oldSlotRef = firestore.collection("tutor_availability").document(oldAvailabilityId)
+                transaction.update(
+                    oldSlotRef,
+                    mapOf(
+                        "slotStatus" to "open",
+                        "isBooked" to false,
+                        "bookingId" to FieldValue.delete(),
+                        "bookedBy" to FieldValue.delete(),
+                        "bookedAt" to FieldValue.delete(),
+                        "pendingBookingId" to FieldValue.delete(),
+                        "pendingStudentId" to FieldValue.delete()
+                    )
+                )
+            }
+
+            // Claim the new slot
+            transaction.update(
+                newSlotRef,
+                mapOf(
+                    "slotStatus" to "booked",
+                    "isBooked" to true,
+                    "bookingId" to bookingId,
+                    "bookedBy" to studentId,
+                    "bookedAt" to FieldValue.serverTimestamp()
+                )
+            )
+
+            val newDate = newSlotSnapshot.getString("date").orEmpty()
+            val newStartHour = newSlotSnapshot.get("startHour")?.toString().orEmpty()
+            val newEndHour = newSlotSnapshot.get("endHour")?.toString().orEmpty()
+            val (newLessonStart, newLessonEnd) = parseRequiredLessonWindow(newDate, newStartHour, newEndHour)
+            requireFutureWindow(newLessonStart)
+
+            transaction.update(
+                bookingRef,
+                mapOf(
+                    "availabilityId" to newSlotId,
+                    "date" to newDate,
+                    "startHour" to newStartHour,
+                    "endHour" to newEndHour,
+                    "format" to (newSlotSnapshot.getString("format") ?: "ONLINE"),
+                    "location" to (newSlotSnapshot.getString("location") ?: ""),
+                    "meetingUrl" to (newSlotSnapshot.getString("meetingUrl") ?: ""),
+                    "lessonStartsAt" to newLessonStart.toFirebaseTimestamp(),
+                    "lessonEndsAt" to newLessonEnd.toFirebaseTimestamp(),
+                    "rescheduledAt" to FieldValue.serverTimestamp(),
+                    "rescheduledBy" to user.uid
+                )
+            )
+        }.await()
+    }
+
+    /**
+     * Marks a CONFIRMED booking as COMPLETED (tutor, admin, or student).
+     */
+    suspend fun markLessonCompleted(bookingId: String, user: AppUser) {
+        updateLessonOutcome(bookingId, user, newStatus = "COMPLETED")
+    }
+
+    /**
+     * Marks a CONFIRMED booking as NO_SHOW (tutor, admin, or student).
+     */
+    suspend fun markNoShow(bookingId: String, user: AppUser) {
+        updateLessonOutcome(bookingId, user, newStatus = "NO_SHOW")
+    }
+
+    private suspend fun updateLessonOutcome(bookingId: String, user: AppUser, newStatus: String) {
+        require(bookingId.isNotEmpty()) { "Booking ID cannot be empty." }
+
+        val bookingRef = firestore.collection("bookings").document(bookingId)
+
+        firestore.runTransaction { transaction ->
+            val bookingSnapshot = transaction.get(bookingRef)
+            if (!bookingSnapshot.exists()) {
+                throw IllegalStateException("Booking not found.")
+            }
+
+            val studentId = bookingSnapshot.getString("studentId").orEmpty()
+            val tutorId = bookingSnapshot.getString("tutorId").orEmpty()
+            val isParticipant = studentId == user.uid || tutorId == user.uid
+            if (!isParticipant && !user.hasRole(UserRole.ADMIN)) {
+                throw IllegalStateException("Permission denied.")
+            }
+
+            val currentStatus = bookingSnapshot.getString("status").orEmpty()
+            if (currentStatus != "CONFIRMED") {
+                throw IllegalStateException("Only CONFIRMED bookings can be marked $newStatus (current: $currentStatus).")
+            }
+
+            transaction.update(
+                bookingRef,
+                mapOf(
+                    "status" to newStatus,
+                    "resolvedAt" to FieldValue.serverTimestamp(),
+                    "resolvedBy" to user.uid
+                )
+            )
+        }.await()
+    }
+
+    // -------------------------------------------------------------------------
+
     suspend fun createReview(
         student: AppUser,
         tutorUid: String,
@@ -825,11 +1152,7 @@ class TutoringRepository(
         )
     }
 
-    private fun String?.toBookingStatus(): String {
-        if (this.isNullOrBlank()) return "CONFIRMED"
-        if (this.equals("booked", ignoreCase = true)) return "CONFIRMED"
-        return this
-    }
+    private fun String?.toBookingStatus(): String = BookingRules.normalizeLegacyStatus(this)
 
     private fun toBooking(document: DocumentSnapshot): LessonBookingUi? {
         val tutorId = document.getString("tutorId") ?: return null
