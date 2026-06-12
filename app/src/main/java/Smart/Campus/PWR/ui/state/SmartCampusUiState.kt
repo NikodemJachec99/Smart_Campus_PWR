@@ -32,20 +32,56 @@ data class AvailabilityFormState(
     val subject: String = "",
     val date: String = "",
     val startHour: String = "",
-    val endHour: String = ""
+    val endHour: String = "",
+    val durationMinutes: Int = 60,
+    val format: String = "ONLINE",
+    val location: String = "",
+    val meetingUrl: String = "",
+    val topic: String = ""
 )
+
+data class TutorSearchFilterState(
+    val tutorQuery: String = "",
+    val subjectQuery: String = "",
+    val date: String = "",
+    val format: String? = null,
+    val minRating: Int? = null,
+    val availableToday: Boolean = false,
+    val sort: String = "TOP_RATED"
+) {
+    val hasActiveFilters: Boolean
+        get() = tutorQuery.isNotBlank() || subjectQuery.isNotBlank() || date.isNotBlank()
+}
 
 data class ReviewFormState(
     val tutorUid: String = "",
     val bookingId: String = "",
     val rating: String = "5",
-    val comment: String = ""
+    val comment: String = "",
+    val selectedTags: List<String> = emptyList(),
+    val anonymous: Boolean = false
 )
 
 data class ReportFormState(
     val tutorUid: String = "",
     val reason: String = "",
-    val details: String = ""
+    val details: String = "",
+    val severity: String = "MEDIUM"
+)
+
+data class ProfileEditState(
+    val bio: String = "",
+    val subjects: String = "",
+    val experienceYears: String = "",
+    val program: String = "",
+    val studyYear: String = "",
+    val faculty: String = ""
+)
+
+data class BookingRequestState(
+    val slotId: String = "",
+    val message: String = "",
+    val topic: String = ""
 )
 
 data class AdminUserInspectorUi(
@@ -78,10 +114,14 @@ data class SmartCampusUiState(
     val createUserForm: CreateUserFormState = CreateUserFormState(),
     val isMainSubmitting: Boolean = false,
     val availabilityForm: AvailabilityFormState = AvailabilityFormState(),
+    val tutorSearchFilters: TutorSearchFilterState = TutorSearchFilterState(),
     val reviewForm: ReviewFormState = ReviewFormState(),
     val reportForm: ReportFormState = ReportFormState(),
     val assignmentForm: AssignmentFormState = AssignmentFormState(),
     val courseForm: CourseFormState = CourseFormState(),
     val chat: ChatUiState = ChatUiState(),
-    val dashboardState: DashboardUiState = DashboardUiState()
+    val dashboardState: DashboardUiState = DashboardUiState(),
+    val profileEdit: ProfileEditState = ProfileEditState(),
+    val bookingRequest: BookingRequestState = BookingRequestState(),
+    val rescheduleTargetBookingId: String? = null
 )

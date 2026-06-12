@@ -32,7 +32,12 @@ data class TutorAvailabilityUi(
     val dateLabel: String,
     val startHour: String,
     val endHour: String,
-    val isBooked: Boolean
+    val isBooked: Boolean,
+    val durationMinutes: Int = 60,
+    val format: String = "ONLINE",
+    val location: String = "",
+    val meetingUrl: String = "",
+    val topic: String = ""
 ) {
     val timeLabel: String
         get() = "$startHour - $endHour"
@@ -52,7 +57,12 @@ data class LessonBookingUi(
     val status: String,
     val cancelReason: String = "",
     val cancelledBy: String = "",
-    val cancelledAtLabel: String = ""
+    val cancelledAtLabel: String = "",
+    val format: String = "ONLINE",
+    val location: String = "",
+    val meetingUrl: String = "",
+    val topic: String = "",
+    val requestMessage: String = ""
 ) {
     val timeLabel: String
         get() = "$startHour - $endHour"
@@ -71,7 +81,9 @@ data class TutorReviewUi(
     val reviewType: String = "general",
     val subject: String = "",
     val lessonDateLabel: String = "",
-    val lessonTimeLabel: String = ""
+    val lessonTimeLabel: String = "",
+    val tags: List<String> = emptyList(),
+    val anonymous: Boolean = false
 )
 
 data class TutorReportUi(
@@ -83,13 +95,27 @@ data class TutorReportUi(
     val reason: String,
     val details: String,
     val status: String,
-    val createdAtLabel: String
+    val createdAtLabel: String,
+    val severity: String = "MEDIUM",
+    val moderatorNote: String = ""
 )
 
 data class TutorSummaryUi(
     val uid: String,
     val displayName: String,
-    val subjects: String
+    val subjects: String,
+    val bio: String = "",
+    val subjectsList: List<String> = emptyList(),
+    val verified: Boolean = false,
+    val experienceYears: Int? = null,
+    val ratingAvg: Double = 0.0,
+    val ratingCount: Int = 0
+)
+
+data class TutorRatingStats(
+    val avg: Double,
+    val count: Int,
+    val dist: List<Int>
 )
 
 data class DashboardUiState(

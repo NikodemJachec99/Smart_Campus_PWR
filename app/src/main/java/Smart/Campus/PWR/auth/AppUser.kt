@@ -7,7 +7,14 @@ data class AppUser(
     val displayName: String,
     val roles: Set<UserRole>,
     val isActive: Boolean,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val program: String? = null,
+    val studyYear: String? = null,
+    val faculty: String? = null,
+    val bio: String? = null,
+    val subjects: List<String> = emptyList(),
+    val experienceYears: Int? = null,
+    val verified: Boolean = false
 ) {
     fun hasRole(role: UserRole): Boolean = roles.contains(role)
 
