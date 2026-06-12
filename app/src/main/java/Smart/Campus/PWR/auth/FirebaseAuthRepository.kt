@@ -293,7 +293,14 @@ class FirebaseAuthRepository(
             displayName = displayName,
             roles = roles,
             isActive = isActive,
-            avatarUrl = avatarUrl
+            avatarUrl = avatarUrl,
+            program = data["program"] as? String,
+            studyYear = data["studyYear"] as? String,
+            faculty = data["faculty"] as? String,
+            bio = data["bio"] as? String,
+            subjects = (data["subjects"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            experienceYears = (data["experienceYears"] as? Long)?.toInt(),
+            verified = data["verified"] as? Boolean ?: false
         )
     }
 }

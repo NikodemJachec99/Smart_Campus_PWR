@@ -96,7 +96,12 @@ class TutoringRepository(
         subject: String,
         date: String,
         startHour: String,
-        endHour: String
+        endHour: String,
+        durationMinutes: Int = 60,
+        format: String = "ONLINE",
+        location: String = "",
+        meetingUrl: String = "",
+        topic: String = ""
     ) {
         val normalizedSubject = subject.trim()
         val normalizedDate = date.trim()
@@ -119,6 +124,11 @@ class TutoringRepository(
             "startAt" to startAt.toFirebaseTimestamp(),
             "endAt" to endAt.toFirebaseTimestamp(),
             "isBooked" to false,
+            "durationMinutes" to durationMinutes,
+            "format" to format,
+            "location" to location,
+            "meetingUrl" to meetingUrl,
+            "topic" to topic,
             "createdAt" to FieldValue.serverTimestamp()
         )
 
@@ -152,7 +162,12 @@ class TutoringRepository(
         newDate: String,
         newStartHour: String,
         newEndHour: String,
-        user: AppUser
+        user: AppUser,
+        durationMinutes: Int = 60,
+        format: String = "ONLINE",
+        location: String = "",
+        meetingUrl: String = "",
+        topic: String = ""
     ) {
         val normalizedSubject = newSubject.trim()
         val normalizedDate = newDate.trim()
@@ -193,6 +208,11 @@ class TutoringRepository(
                     "endHour" to normalizedEnd,
                     "startAt" to startAt.toFirebaseTimestamp(),
                     "endAt" to endAt.toFirebaseTimestamp(),
+                    "durationMinutes" to durationMinutes,
+                    "format" to format,
+                    "location" to location,
+                    "meetingUrl" to meetingUrl,
+                    "topic" to topic,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
@@ -515,7 +535,11 @@ class TutoringRepository(
                         TutorSummaryUi(
                             uid = appUser.uid,
                             displayName = appUser.displayName,
-                            subjects = "Set in availability"
+                            subjects = appUser.subjects.joinToString(", ").ifBlank { "Set in availability" },
+                            bio = appUser.bio.orEmpty(),
+                            subjectsList = appUser.subjects,
+                            verified = appUser.verified,
+                            experienceYears = appUser.experienceYears
                         )
                     }
                     .sortedBy { it.displayName.lowercase(Locale.getDefault()) }
@@ -760,7 +784,11 @@ class TutoringRepository(
             TutorSummaryUi(
                 uid = appUser.uid,
                 displayName = appUser.displayName,
-                subjects = "Set in availability"
+                subjects = appUser.subjects.joinToString(", ").ifBlank { "Set in availability" },
+                bio = appUser.bio.orEmpty(),
+                subjectsList = appUser.subjects,
+                verified = appUser.verified,
+                experienceYears = appUser.experienceYears
             )
         }.sortedBy { it.displayName.lowercase(Locale.getDefault()) }
     }
@@ -788,8 +816,19 @@ class TutoringRepository(
             dateLabel = date,
             startHour = startHour,
             endHour = endHour,
-            isBooked = document.getBoolean("isBooked") == true
+            isBooked = document.getBoolean("isBooked") == true,
+            durationMinutes = document.getLong("durationMinutes")?.toInt() ?: 60,
+            format = document.getString("format") ?: "ONLINE",
+            location = document.getString("location") ?: "",
+            meetingUrl = document.getString("meetingUrl") ?: "",
+            topic = document.getString("topic") ?: ""
         )
+    }
+
+    private fun String?.toBookingStatus(): String {
+        if (this.isNullOrBlank()) return "CONFIRMED"
+        if (this.equals("booked", ignoreCase = true)) return "CONFIRMED"
+        return this
     }
 
     private fun toBooking(document: DocumentSnapshot): LessonBookingUi? {
@@ -813,10 +852,15 @@ class TutoringRepository(
             dateLabel = date,
             startHour = startHour,
             endHour = endHour,
-            status = document.getString("status") ?: "booked",
+            status = document.getString("status").toBookingStatus(),
             cancelReason = document.getString("cancelReason").orEmpty(),
             cancelledBy = document.getString("cancelledBy").orEmpty(),
-            cancelledAtLabel = formatTimestamp(document.get("cancelledAt"))
+            cancelledAtLabel = formatTimestamp(document.get("cancelledAt")),
+            format = document.getString("format") ?: "ONLINE",
+            location = document.getString("location") ?: "",
+            meetingUrl = document.getString("meetingUrl") ?: "",
+            topic = document.getString("topic") ?: "",
+            requestMessage = document.getString("requestMessage") ?: ""
         )
     }
 
@@ -838,7 +882,9 @@ class TutoringRepository(
             reviewType = document.getString("reviewType").orEmpty().ifBlank { "general" },
             subject = document.getString("subject").orEmpty(),
             lessonDateLabel = document.getString("lessonDate").orEmpty(),
-            lessonTimeLabel = document.getString("lessonTime").orEmpty()
+            lessonTimeLabel = document.getString("lessonTime").orEmpty(),
+            tags = (document.get("tags") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            anonymous = document.getBoolean("anonymous") ?: false
         )
     }
 
@@ -855,7 +901,9 @@ class TutoringRepository(
             reason = document.getString("reason").orEmpty(),
             details = document.getString("details").orEmpty(),
             status = document.getString("status") ?: "open",
-            createdAtLabel = formatTimestamp(document.get("createdAt"))
+            createdAtLabel = formatTimestamp(document.get("createdAt")),
+            severity = document.getString("severity") ?: "MEDIUM",
+            moderatorNote = document.getString("moderatorNote") ?: ""
         )
     }
 
@@ -873,7 +921,11 @@ class TutoringRepository(
             displayName = (data["displayName"] as? String).orEmpty().ifBlank { login },
             roles = AuthMapping.parseRoles(data["roles"], data["role"] as? String),
             isActive = data["isActive"] as? Boolean ?: true,
-            avatarUrl = data["avatarUrl"] as? String
+            avatarUrl = data["avatarUrl"] as? String,
+            bio = data["bio"] as? String,
+            subjects = (data["subjects"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            experienceYears = (data["experienceYears"] as? Long)?.toInt(),
+            verified = data["verified"] as? Boolean ?: false
         )
     }
 
