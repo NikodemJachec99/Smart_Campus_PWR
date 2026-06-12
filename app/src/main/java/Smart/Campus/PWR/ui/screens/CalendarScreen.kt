@@ -100,7 +100,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -145,6 +148,7 @@ fun CalendarTab(
     onBookingRequestTopicChanged: (String) -> Unit,
     onDeleteAvailability: (String) -> Unit,
     onCancelBooking: (String, String, String) -> Unit,
+    onTutorSearchQueryChanged: (String) -> Unit,
     onTutorSearchTutorChanged: (String) -> Unit,
     onTutorSearchSubjectChanged: (String) -> Unit,
     onTutorSearchDateChanged: (String) -> Unit,
@@ -182,6 +186,7 @@ fun CalendarTab(
             StudentFindFlow(
                 state = state,
                 onBookTutorSlot = onBookTutorSlot,
+                onTutorSearchQueryChanged = onTutorSearchQueryChanged,
                 onStartBookingRequest = onStartBookingRequest,
                 onBookingRequestMessageChanged = onBookingRequestMessageChanged,
                 onBookingRequestTopicChanged = onBookingRequestTopicChanged,
@@ -209,6 +214,7 @@ fun CalendarTab(
 private fun StudentFindFlow(
     state: SmartCampusUiState,
     onBookTutorSlot: (String) -> Unit,
+    onTutorSearchQueryChanged: (String) -> Unit,
     onStartBookingRequest: (String) -> Unit,
     onBookingRequestMessageChanged: (String) -> Unit,
     onBookingRequestTopicChanged: (String) -> Unit,
@@ -235,6 +241,7 @@ private fun StudentFindFlow(
         )
         is StudentStep.Results -> ScreenFindResults(
             state = state,
+            onTutorSearchQueryChanged = onTutorSearchQueryChanged,
             onTutorSearchTutorChanged = onTutorSearchTutorChanged,
             onTutorSearchSubjectChanged = onTutorSearchSubjectChanged,
             onTutorSearchDateChanged = onTutorSearchDateChanged,
@@ -305,7 +312,7 @@ private fun ScreenFind(
             .sorted()
             .take(6)
     }
-    val searchQuery = state.tutorSearchFilters.subjectQuery
+    val searchQuery = state.tutorSearchFilters.query
 
     Column(modifier = Modifier.fillMaxSize()) {
         SoftTopBar(title = "Find a tutor")
@@ -499,6 +506,7 @@ private fun ScreenFind(
 @Composable
 private fun ScreenFindResults(
     state: SmartCampusUiState,
+    onTutorSearchQueryChanged: (String) -> Unit,
     onTutorSearchTutorChanged: (String) -> Unit,
     onTutorSearchSubjectChanged: (String) -> Unit,
     onTutorSearchDateChanged: (String) -> Unit,
@@ -576,12 +584,12 @@ private fun ScreenFindResults(
         ) {
             SoftIconButton(icon = SoftIcons.back, onClick = onBack)
             SearchField(
-                value = filters.subjectQuery,
-                onValueChange = onTutorSearchSubjectChanged,
-                placeholder = "Search subjects or tutors",
+                value = filters.query,
+                onValueChange = onTutorSearchQueryChanged,
+                placeholder = "Subject or tutor name…",
                 modifier = Modifier.weight(1f),
-                trailing = if (filters.subjectQuery.isNotBlank()) {
-                    { SoftIconButton(icon = SoftIcons.x, onClick = { onTutorSearchSubjectChanged("") }) }
+                trailing = if (filters.query.isNotBlank()) {
+                    { SoftIconButton(icon = SoftIcons.x, onClick = { onTutorSearchQueryChanged("") }) }
                 } else null
             )
         }
@@ -630,13 +638,20 @@ private fun ScreenFindResults(
                     leadingIcon = SoftIcons.calendar
                 ) { showDatePicker = true }
 
-                // Tutor filter chip (quick-clear)
+                // Active tutor / subject filters (tap to clear)
                 if (filters.tutorQuery.isNotBlank()) {
                     Chip(
                         text = filters.tutorQuery,
                         selected = true,
                         leadingIcon = SoftIcons.user
                     ) { onTutorSearchTutorChanged("") }
+                }
+                if (filters.subjectQuery.isNotBlank()) {
+                    Chip(
+                        text = filters.subjectQuery,
+                        selected = true,
+                        leadingIcon = SoftIcons.book
+                    ) { onTutorSearchSubjectChanged("") }
                 }
 
                 // Online / In-person format toggle
@@ -686,130 +701,211 @@ private fun ScreenFindResults(
 
         Spacer(Modifier.height(4.dp))
 
-        // Tutor result cards
+        // Tutor result cards, sectioned by what the query matched
+        val query = filters.query.trim()
+        val entries = tutorSlotMap.entries.toList()
+        val nameMatches = if (query.isBlank()) emptyList() else entries.filter { (_, slots) ->
+            slots.first().tutorDisplayName.contains(query, ignoreCase = true)
+        }
+        val subjectMatches = entries.filterNot { entry -> nameMatches.any { it.key == entry.key } }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (tutorSlotMap.isEmpty()) {
+            if (entries.isEmpty()) {
                 item {
                     Spacer(Modifier.height(24.dp))
                     CardFlat {
                         Text(
-                            text = "No tutors match your search.",
+                            text = if (query.isBlank())
+                                "No tutors match your filters."
+                            else
+                                "Nothing matches \"$query\" \u2014 try a subject (e.g. Analiza) or a tutor name.",
                             style = SoftType.bodySm,
                             modifier = Modifier.padding(4.dp)
                         )
                     }
                 }
             } else {
-                items(tutorSlotMap.entries.toList()) { (tutorId, slots) ->
-                    val firstSlot = slots.first()
-                    val subjects = slots.map { it.subject }.distinct().take(3)
-                    val nextSlot = slots.minByOrNull { it.dateLabel + it.startHour }
-                    val tutorSummary = tutorMap[tutorId]
-
-                    SoftCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onOpenProfile(tutorId, firstSlot.tutorDisplayName) }
-                    ) {
-                        // Header row: avatar + name + badges
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(13.dp)
-                        ) {
-                            InitialsAvatar(name = firstSlot.tutorDisplayName, size = 56.dp)
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = firstSlot.tutorDisplayName,
-                                        style = SoftType.title.copy(fontSize = 15.sp),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    if (tutorSummary?.verified == true) {
-                                        Badge(text = "Verified", tone = BadgeTone.Prim)
-                                    }
-                                }
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = subjects.joinToString(" · "),
-                                    style = SoftType.bodySm
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    val rating = tutorSummary?.ratingAvg?.toFloat() ?: 0f
-                                    val count = tutorSummary?.ratingCount ?: 0
-                                    if (count > 0) {
-                                        StarsRow(value = rating)
-                                        Text(
-                                            text = "${"%.1f".format(rating)} ($count)",
-                                            style = SoftType.meta.copy(fontSize = 12.sp)
-                                        )
-                                    } else {
-                                        Text(
-                                            text = "No reviews yet",
-                                            style = SoftType.meta.copy(fontSize = 12.sp)
-                                        )
-                                    }
-                                    if (tutorSummary?.experienceYears != null) {
-                                        Text(
-                                            text = "· ${tutorSummary.experienceYears} yrs",
-                                            style = SoftType.meta.copy(fontSize = 12.sp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-                        SoftDivider()
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Next available slot
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                StatusDot(color = Green)
-                                Text(
-                                    text = if (nextSlot != null)
-                                        "${nextSlot.dateLabel} ${nextSlot.startHour}"
-                                    else "No slots",
-                                    style = TextStyle(
-                                        fontFamily = BodyFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.5.sp,
-                                        color = Green
-                                    )
-                                )
-                            }
-                            Badge(
-                                text = "${slots.size} open",
-                                tone = BadgeTone.Prim
-                            )
-                        }
+                if (query.isNotBlank() && nameMatches.isNotEmpty()) {
+                    item { ResultsSectionLabel(icon = SoftIcons.user, text = "Tutors matching \"$query\"") }
+                    items(nameMatches) { (tutorId, slots) ->
+                        TutorResultCard(
+                            slots = slots,
+                            tutorSummary = tutorMap[tutorId],
+                            query = query,
+                            onClick = { onOpenProfile(tutorId, slots.first().tutorDisplayName) }
+                        )
                     }
+                    if (subjectMatches.isNotEmpty()) {
+                        item { ResultsSectionLabel(icon = SoftIcons.book, text = "Teaching \"$query\"") }
+                    }
+                }
+                items(subjectMatches) { (tutorId, slots) ->
+                    TutorResultCard(
+                        slots = slots,
+                        tutorSummary = tutorMap[tutorId],
+                        query = query,
+                        onClick = { onOpenProfile(tutorId, slots.first().tutorDisplayName) }
+                    )
                 }
             }
             item { Spacer(Modifier.height(100.dp)) }
+        }
+    }
+}
+
+// ─── Results helpers ──────────────────────────────────────────────────
+
+@Composable
+private fun ResultsSectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(top = 6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Primary600,
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = text.uppercase(),
+            style = TextStyle(
+                fontFamily = BodyFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                letterSpacing = 0.8.sp,
+                color = Ink3
+            )
+        )
+    }
+}
+
+@Composable
+private fun TutorResultCard(
+    slots: List<TutorAvailabilityUi>,
+    tutorSummary: TutorSummaryUi?,
+    query: String,
+    onClick: () -> Unit
+) {
+    val firstSlot = slots.first()
+    val subjects = slots.map { it.subject }.distinct().take(3)
+    val nextSlot = slots.minByOrNull { it.dateLabel + it.startHour }
+
+    SoftCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+    ) {
+        // Header row: avatar + name + badges
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(13.dp)
+        ) {
+            InitialsAvatar(name = firstSlot.tutorDisplayName, size = 56.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = firstSlot.tutorDisplayName,
+                        style = SoftType.title.copy(fontSize = 15.sp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (tutorSummary?.verified == true) {
+                        Badge(text = "Verified", tone = BadgeTone.Prim)
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+                // Subjects line — matching subjects are highlighted so it is
+                // obvious WHY this tutor is in the results.
+                Text(
+                    text = buildAnnotatedString {
+                        subjects.forEachIndexed { index, subj ->
+                            if (index > 0) append(" · ")
+                            val hit = query.isNotBlank() && subj.contains(query, ignoreCase = true)
+                            if (hit) {
+                                withStyle(SpanStyle(color = Primary600, fontWeight = FontWeight.Bold)) {
+                                    append(subj)
+                                }
+                            } else {
+                                append(subj)
+                            }
+                        }
+                    },
+                    style = SoftType.bodySm
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val rating = tutorSummary?.ratingAvg?.toFloat() ?: 0f
+                    val count = tutorSummary?.ratingCount ?: 0
+                    if (count > 0) {
+                        StarsRow(value = rating)
+                        Text(
+                            text = "${"%.1f".format(rating)} ($count)",
+                            style = SoftType.meta.copy(fontSize = 12.sp)
+                        )
+                    } else {
+                        Text(
+                            text = "No reviews yet",
+                            style = SoftType.meta.copy(fontSize = 12.sp)
+                        )
+                    }
+                    if (tutorSummary?.experienceYears != null) {
+                        Text(
+                            text = "· ${tutorSummary.experienceYears} yrs",
+                            style = SoftType.meta.copy(fontSize = 12.sp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        SoftDivider()
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Next available slot
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusDot(color = Green)
+                Text(
+                    text = if (nextSlot != null)
+                        "${nextSlot.dateLabel} ${nextSlot.startHour}"
+                    else "No slots",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = Green
+                    )
+                )
+            }
+            Badge(
+                text = "${slots.size} open",
+                tone = BadgeTone.Prim
+            )
         }
     }
 }

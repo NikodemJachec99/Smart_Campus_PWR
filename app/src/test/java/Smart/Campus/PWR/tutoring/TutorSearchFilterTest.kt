@@ -52,6 +52,52 @@ class TutorSearchFilterTest {
         assertEquals(2, result.size)
     }
 
+    // ─── unified query (subject OR tutor) ────────────────────────────────────
+
+    @Test
+    fun query_matchesSubject() {
+        val slots = listOf(
+            slot(id = "s1", subject = "Analiza Matematyczna", tutorDisplayName = "Alice"),
+            slot(id = "s2", subject = "Physics", tutorDisplayName = "Bob")
+        )
+        val result = TutorRatings.applyTutorSearch(
+            slots, noRatings, TutorSearchFilterState(query = "analiza"), today
+        )
+        assertEquals(1, result.size)
+        assertEquals("Analiza Matematyczna", result[0].subject)
+    }
+
+    @Test
+    fun query_matchesTutorName() {
+        val slots = listOf(
+            slot(id = "s1", subject = "Analiza Matematyczna", tutorDisplayName = "Alice"),
+            slot(id = "s2", subject = "Physics", tutorDisplayName = "Bartek Nowak")
+        )
+        val result = TutorRatings.applyTutorSearch(
+            slots, noRatings, TutorSearchFilterState(query = "bartek"), today
+        )
+        assertEquals(1, result.size)
+        assertEquals("Bartek Nowak", result[0].tutorDisplayName)
+    }
+
+    @Test
+    fun query_matchesEitherSubjectOrTutor() {
+        val slots = listOf(
+            slot(id = "s1", subject = "Java", tutorDisplayName = "Alice"),
+            slot(id = "s2", subject = "Physics", tutorDisplayName = "Java Joe"),
+            slot(id = "s3", subject = "Math", tutorDisplayName = "Bob")
+        )
+        val result = TutorRatings.applyTutorSearch(
+            slots, noRatings, TutorSearchFilterState(query = "java"), today
+        )
+        assertEquals(setOf("s1", "s2"), result.map { it.id }.toSet())
+    }
+
+    @Test
+    fun query_countsAsActiveFilter() {
+        assertTrue(TutorSearchFilterState(query = "x").hasActiveFilters)
+    }
+
     // ─── tutor filter ────────────────────────────────────────────────────────
 
     @Test

@@ -41,6 +41,8 @@ data class AvailabilityFormState(
 )
 
 data class TutorSearchFilterState(
+    /** Free-text search matching subject OR tutor name. */
+    val query: String = "",
     val tutorQuery: String = "",
     val subjectQuery: String = "",
     val date: String = "",
@@ -50,7 +52,7 @@ data class TutorSearchFilterState(
     val sort: String = "TOP_RATED"
 ) {
     val hasActiveFilters: Boolean
-        get() = tutorQuery.isNotBlank() || subjectQuery.isNotBlank() || date.isNotBlank()
+        get() = query.isNotBlank() || tutorQuery.isNotBlank() || subjectQuery.isNotBlank() || date.isNotBlank()
 }
 
 data class ReviewFormState(

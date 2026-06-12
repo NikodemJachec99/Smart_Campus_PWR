@@ -285,6 +285,10 @@ class SmartCampusViewModel(
         _uiState.update { it.copy(availabilityForm = it.availabilityForm.copy(topic = value)) }
     }
 
+    fun onTutorSearchQueryChanged(value: String) {
+        _uiState.update { it.copy(tutorSearchFilters = it.tutorSearchFilters.copy(query = value)) }
+    }
+
     fun onTutorSearchTutorChanged(value: String) {
         _uiState.update { it.copy(tutorSearchFilters = it.tutorSearchFilters.copy(tutorQuery = value)) }
     }

@@ -198,24 +198,6 @@ private fun StudentHomeContent(
             EmptyNextLessonCard()
         }
 
-        // ── Search shortcut ───────────────────────────────────────────────────
-        // enabled=false: the text field must not swallow taps — the whole field
-        // is a navigation shortcut into the Find flow.
-        SearchField(
-            value = "",
-            onValueChange = {},
-            placeholder = "Find a tutor or subject…",
-            big = true,
-            readOnly = true,
-            enabled = false,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onNavigate(DashboardRoutes.CALENDAR) }
-        )
-
         // ── Assignments shortcut (Tasks is not in the student bottom nav) ────
         CardQ(
             modifier = Modifier

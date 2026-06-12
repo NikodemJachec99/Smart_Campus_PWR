@@ -275,6 +275,7 @@ fun MainShellScreen(
                                     onBookingRequestTopicChanged = viewModel::onBookingRequestTopicChanged,
                                     onDeleteAvailability = onDeleteAvailability,
                                     onCancelBooking = onCancelBooking,
+                                    onTutorSearchQueryChanged = viewModel::onTutorSearchQueryChanged,
                                     onTutorSearchTutorChanged = viewModel::onTutorSearchTutorChanged,
                                     onTutorSearchSubjectChanged = viewModel::onTutorSearchSubjectChanged,
                                     onTutorSearchDateChanged = viewModel::onTutorSearchDateChanged,

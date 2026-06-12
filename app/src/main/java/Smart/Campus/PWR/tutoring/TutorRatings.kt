@@ -58,10 +58,14 @@ object TutorRatings {
         filter: TutorSearchFilterState,
         today: String
     ): List<TutorAvailabilityUi> {
+        val query = filter.query.trim()
         val subjectQuery = filter.subjectQuery.trim()
         val tutorQuery = filter.tutorQuery.trim()
 
         val filtered = slots.filter { slot ->
+            val matchesQuery = query.isBlank() ||
+                    slot.subject.contains(query, ignoreCase = true) ||
+                    slot.tutorDisplayName.contains(query, ignoreCase = true)
             val matchesSubject = subjectQuery.isBlank() ||
                     slot.subject.contains(subjectQuery, ignoreCase = true)
             val matchesTutor = tutorQuery.isBlank() ||
@@ -72,7 +76,7 @@ object TutorRatings {
                     (ratingByTutor[slot.tutorId] ?: 0.0) >= filter.minRating
             val matchesToday = !filter.availableToday || slot.dateLabel == today
 
-            matchesSubject && matchesTutor && matchesDate && matchesFormat &&
+            matchesQuery && matchesSubject && matchesTutor && matchesDate && matchesFormat &&
                     matchesMinRating && matchesToday
         }
 
