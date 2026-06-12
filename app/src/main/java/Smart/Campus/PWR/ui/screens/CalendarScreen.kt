@@ -821,6 +821,7 @@ private fun ScreenTutorProfile(
     state: SmartCampusUiState,
     tutorId: String,
     tutorName: String,
+    onTutorSearchSubjectChanged: (String) -> Unit,
     onBack: () -> Unit,
     onBook: (String) -> Unit
 ) {
@@ -837,10 +838,14 @@ private fun ScreenTutorProfile(
     val tutorSummary: TutorSummaryUi? = remember(state.dashboardState.tutors, tutorId) {
         state.dashboardState.tutors.firstOrNull { it.uid == tutorId }
     }
-    val subjects = if (tutorSummary?.subjectsList?.isNotEmpty() == true)
-        tutorSummary.subjectsList
-    else
-        tutorSlots.map { it.subject }.distinct()
+    // Subjects this tutor actually has open slots for — each chip is a live
+    // filter the student can tap to switch which subject's slots are shown.
+    val subjectsWithSlots = remember(state.dashboardState.availableTutorSlots, tutorId) {
+        state.dashboardState.availableTutorSlots
+            .filter { it.tutorId == tutorId }
+            .map { it.subject }
+            .distinct()
+    }
 
     val reviews = remember(state.dashboardState.reviewsForMe, tutorId) {
         state.dashboardState.reviewsForMe.filter { it.tutorId == tutorId }.take(3)
@@ -977,14 +982,25 @@ private fun ScreenTutorProfile(
 
                 Spacer(Modifier.height(14.dp))
 
-                // Subject chips — real subjectsList from TutorSummaryUi
-                if (subjects.isNotEmpty()) {
+                // Subject chips — tap to scope the calendar to one of the tutor's
+                // other available subjects.
+                if (subjectsWithSlots.isNotEmpty()) {
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        subjects.forEach { subj ->
-                            Chip(text = subj)
+                        subjectsWithSlots.forEach { subj ->
+                            val isActive = subjectQuery.isNotBlank() &&
+                                    subj.contains(subjectQuery, ignoreCase = true)
+                            Chip(
+                                text = subj,
+                                selected = isActive,
+                                onClick = {
+                                    // Tapping the active subject clears the filter (show all),
+                                    // tapping another scopes the calendar to that subject.
+                                    onTutorSearchSubjectChanged(if (isActive) "" else subj)
+                                }
+                            )
                         }
                     }
                 }
@@ -1013,7 +1029,36 @@ private fun ScreenTutorProfile(
                             )
                         }
                     }
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(16.dp))
+
+                    // Available times for the picked day — shown up-front so the
+                    // student sees when the tutor is free without opening booking.
+                    val timesForDay = tutorSlots
+                        .filter { it.dateLabel == selectedDate }
+                        .sortedBy { it.startHour }
+                    if (timesForDay.isNotEmpty()) {
+                        Text("Available times", style = SoftType.meta)
+                        Spacer(Modifier.height(8.dp))
+                        timesForDay.chunked(3).forEach { rowSlots ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowSlots.forEach { slot ->
+                                    SlotChip(
+                                        label = slot.startHour,
+                                        modifier = Modifier.weight(1f),
+                                        state = SlotState.Default
+                                    )
+                                }
+                                repeat(3 - rowSlots.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+
                     SoftButton(
                         text = "Choose time",
                         onClick = { if (selectedDate.isNotBlank()) onBook(selectedDate) },
