@@ -81,6 +81,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
@@ -89,7 +90,6 @@ import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1098,7 +1098,7 @@ private fun SiAttachmentBlock(attachment: ChatAttachmentUi, mine: Boolean, onCli
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                Icons.Rounded.InsertDriveFile,
+                Icons.AutoMirrored.Rounded.InsertDriveFile,
                 contentDescription = null,
                 tint = if (mine) White else Primary,
                 modifier = Modifier.size(22.dp)
@@ -1400,7 +1400,7 @@ private fun SiPendingAttachmentBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                if (attachment.mimeType.startsWith("image/")) Icons.Rounded.Image else Icons.Rounded.InsertDriveFile,
+                if (attachment.mimeType.startsWith("image/")) Icons.Rounded.Image else Icons.AutoMirrored.Rounded.InsertDriveFile,
                 contentDescription = null,
                 tint = Primary,
                 modifier = Modifier.size(18.dp)

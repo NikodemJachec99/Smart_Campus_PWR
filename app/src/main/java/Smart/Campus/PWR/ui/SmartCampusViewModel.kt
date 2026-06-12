@@ -1049,12 +1049,14 @@ class SmartCampusViewModel(
     }
 
     private fun restartAssignmentsListener() {
+        val user = _uiState.value.currentUser ?: return
         val visibleCourseIds = _uiState.value.dashboardState.visibleCourseIds
         assignmentsRealtime?.remove()
         assignmentsRealtime = assignmentRepository.listenAssignmentsForCourses(
             courseIds = visibleCourseIds,
             onUpdate = { assignments ->
                 _uiState.update { it.copy(dashboardState = it.dashboardState.copy(assignments = assignments)) }
+                restartMySubmissionsRealtime(user, assignments)
             },
             onError = { error ->
                 _uiState.update { it.copy(errorMessage = authRepository.userMessage(error)) }
@@ -2186,7 +2188,7 @@ class SmartCampusViewModel(
     }
 
     private fun courseWithFlags(courses: List<CourseUi>, visibleCourseIds: List<String>): List<CourseUi> =
-        courses.map { it.copy(isEnrolled = visibleCourseIds.contains(it.id)) }
+        courses.map { it.copy(isEnrolled = visibleCourseIds.contains(it.id) && !it.isOwner) }
 
     private fun startRealtime(user: AppUser) {
         stopRealtime()

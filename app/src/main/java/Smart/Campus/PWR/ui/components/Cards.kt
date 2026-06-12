@@ -420,9 +420,9 @@ fun ReportCard(
     }
     val severityLabel = report.severity.replaceFirstChar { it.uppercase() }
 
-    val isOpen     = report.status == "open"
+    val isOpen = report.status == "open"
     val isInReview = report.status == "in-review" || report.status == "in_review"
-    val canAct = onStatusChange != null && (isOpen || isInReview)
+    val canAct = isOpen || isInReview
 
     SoftCard(modifier = Modifier.fillMaxWidth()) {
         // Header row: report id + severity badge
@@ -521,7 +521,7 @@ fun ReportCard(
             }
         }
         // Action buttons
-        if (canAct && onStatusChange != null) {
+        onStatusChange?.takeIf { canAct }?.let { changeStatus ->
             Spacer(Modifier.height(10.dp))
             SoftDivider()
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -532,7 +532,7 @@ fun ReportCard(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = ripple(color = Ink3)
-                        ) { onStatusChange(report.id, "dismissed") }
+                        ) { changeStatus(report.id, "dismissed") }
                         .padding(vertical = 13.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -555,7 +555,7 @@ fun ReportCard(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(color = Primary600)
-                            ) { onStatusChange(report.id, "in_review") }
+                            ) { changeStatus(report.id, "in_review") }
                             .padding(vertical = 13.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -578,7 +578,7 @@ fun ReportCard(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(color = Primary600)
-                            ) { onStatusChange(report.id, "resolved") }
+                            ) { changeStatus(report.id, "resolved") }
                             .padding(vertical = 13.dp),
                         contentAlignment = Alignment.Center
                     ) {

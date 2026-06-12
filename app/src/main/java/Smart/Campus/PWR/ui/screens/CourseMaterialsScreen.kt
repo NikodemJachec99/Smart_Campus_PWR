@@ -35,9 +35,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.InsertDriveFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -252,7 +252,7 @@ private fun MaterialRow(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (material.isImage) Icons.Rounded.Image else Icons.Rounded.InsertDriveFile,
+                imageVector = if (material.isImage) Icons.Rounded.Image else Icons.AutoMirrored.Rounded.InsertDriveFile,
                 contentDescription = null,
                 tint = Primary,
                 modifier = Modifier.size(22.dp)
