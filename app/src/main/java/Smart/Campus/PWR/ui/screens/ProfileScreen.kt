@@ -5,6 +5,8 @@ import Smart.Campus.PWR.auth.UserRole
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import Smart.Campus.PWR.ui.components.softindigo.Badge
+import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
 import Smart.Campus.PWR.ui.components.softindigo.CardQ
 import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
 import Smart.Campus.PWR.ui.components.softindigo.RoleSwitch
@@ -247,6 +249,7 @@ fun ProfileTab(
                     title = "Notifications",
                     subtitle = null,
                     icon = SoftIcons.bell,
+                    badgeCount = state.dashboardState.notificationCount,
                     onClick = onOpenNotifications
                 ))
                 add(ProfileMenuItem(
@@ -369,6 +372,7 @@ private data class ProfileMenuItem(
     val title: String,
     val subtitle: String?,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val badgeCount: Int = 0,
     val onClick: () -> Unit
 )
 
@@ -411,7 +415,13 @@ private fun ProfileMenuRow(item: ProfileMenuItem) {
             }
         }
 
-        // Chevron
+        // Unread badge + chevron
+        if (item.badgeCount > 0) {
+            Badge(
+                text = if (item.badgeCount > 9) "9+" else item.badgeCount.toString(),
+                tone = BadgeTone.Red
+            )
+        }
         Icon(
             imageVector = SoftIcons.chev,
             contentDescription = null,

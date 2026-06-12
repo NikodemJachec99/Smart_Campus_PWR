@@ -222,6 +222,7 @@ fun SoftIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     dot: Boolean = false,
+    badgeCount: Int = 0,
     solid: Boolean = false,
     prim: Boolean = false
 ) {
@@ -257,7 +258,30 @@ fun SoftIconButton(
             tint = iconTint,
             modifier = Modifier.size(19.dp)
         )
-        if (dot) {
+        if (badgeCount > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 5.dp, y = (-5).dp)
+                    .clip(badgeShape)
+                    .background(White)
+                    .padding(1.5.dp)
+                    .clip(badgeShape)
+                    .background(Red)
+                    .padding(horizontal = 4.5.dp, vertical = 1.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (badgeCount > 9) "9+" else badgeCount.toString(),
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.5.sp,
+                        color = White
+                    )
+                )
+            }
+        } else if (dot) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)

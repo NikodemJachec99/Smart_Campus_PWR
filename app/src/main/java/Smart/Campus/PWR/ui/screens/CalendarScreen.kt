@@ -252,6 +252,7 @@ private fun StudentFindFlow(
             state = state,
             tutorId = s.tutorId,
             tutorName = s.tutorName,
+            onTutorSearchSubjectChanged = onTutorSearchSubjectChanged,
             onBack = { step = StudentStep.Results },
             onBook = { selectedDate -> step = StudentStep.Booking(s.tutorId, s.tutorName, selectedDate) }
         )
@@ -317,12 +318,14 @@ private fun ScreenFind(
                 .padding(bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            // Big search field
+            // Big search field — pure shortcut into Results (which has the
+            // editable search); enabled=false so the tap is not swallowed.
             SearchField(
                 value = searchQuery,
                 onValueChange = { onTutorSearchSubjectChanged(it) },
                 placeholder = "Search a subject, topic or tutor",
                 big = true,
+                enabled = false,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onNavigateResults() }
@@ -821,8 +824,15 @@ private fun ScreenTutorProfile(
     onBack: () -> Unit,
     onBook: (String) -> Unit
 ) {
-    val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId) {
-        state.dashboardState.availableTutorSlots.filter { it.tutorId == tutorId }
+    // Honor the active subject filter so the profile shows only the slots the
+    // student drilled in for (e.g. "Analiza Matematyczna"), not the tutor's
+    // entire schedule across every subject.
+    val subjectQuery = state.tutorSearchFilters.subjectQuery.trim()
+    val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId, subjectQuery) {
+        state.dashboardState.availableTutorSlots.filter {
+            it.tutorId == tutorId &&
+                (subjectQuery.isBlank() || it.subject.contains(subjectQuery, ignoreCase = true))
+        }
     }
     val tutorSummary: TutorSummaryUi? = remember(state.dashboardState.tutors, tutorId) {
         state.dashboardState.tutors.firstOrNull { it.uid == tutorId }
@@ -1101,9 +1111,15 @@ private fun ScreenBooking(
     onBookingRequestTopicChanged: (String) -> Unit,
     onConfirm: (String, TutorAvailabilityUi) -> Unit
 ) {
-    val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId) {
+    // Keep the booking calendar scoped to the subject the student picked, so the
+    // day strip and slot count match the subject tile they came from.
+    val subjectQuery = state.tutorSearchFilters.subjectQuery.trim()
+    val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId, subjectQuery) {
         state.dashboardState.availableTutorSlots
-            .filter { it.tutorId == tutorId }
+            .filter {
+                it.tutorId == tutorId &&
+                    (subjectQuery.isBlank() || it.subject.contains(subjectQuery, ignoreCase = true))
+            }
             .sortedWith(compareBy<TutorAvailabilityUi> { it.dateLabel }.thenBy { it.startHour })
     }
 

@@ -46,6 +46,7 @@ fun SearchField(
     placeholder: String = "",
     big: Boolean = false,
     readOnly: Boolean = false,
+    enabled: Boolean = true,
     trailing: @Composable (() -> Unit)? = null
 ) {
     val radius = if (big) 18.dp else 16.dp
@@ -73,6 +74,7 @@ fun SearchField(
                 value = value,
                 onValueChange = onValueChange,
                 readOnly = readOnly,
+                enabled = enabled,
                 singleLine = true,
                 textStyle = TextStyle(
                     fontFamily = BodyFontFamily,

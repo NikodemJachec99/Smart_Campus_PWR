@@ -5,6 +5,7 @@ import Smart.Campus.PWR.ui.components.MainList
 import Smart.Campus.PWR.ui.components.softindigo.Badge
 import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
 import Smart.Campus.PWR.ui.components.softindigo.CardFlat
+import Smart.Campus.PWR.ui.components.MessageBlock
 import Smart.Campus.PWR.ui.components.softindigo.CardQ
 import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
 import Smart.Campus.PWR.ui.components.softindigo.RoleSwitch
@@ -133,7 +134,6 @@ private fun StudentHomeContent(
     val displayName = state.currentUser?.displayName.orEmpty()
     val firstName = displayName.split(" ").firstOrNull().orEmpty()
     val greeting = greetingForHour(LocalTime.now().hour)
-    val hasUnread = state.dashboardState.notificationCount > 0
     val lessons = state.dashboardState.myStudentBookings
     val nextLesson = pickNextLesson(lessons)
     val nextLessonMinutes = nextLesson?.let { minutesUntil(it) }
@@ -167,13 +167,15 @@ private fun StudentHomeContent(
                 SoftIconButton(
                     icon = SoftIcons.bell,
                     onClick = onOpenNotifications,
-                    dot = hasUnread
+                    badgeCount = state.dashboardState.notificationCount
                 )
             }
         )
 
         // ── Role switch ───────────────────────────────────────────────────────
         RoleSwitch(isTutor = false, onToggle = onToggleRole, fullWidth = true)
+
+        MessageBlock(state.errorMessage, state.infoMessage)
 
         // ── Next lesson hero card ─────────────────────────────────────────────
         if (nextLesson != null) {
@@ -197,12 +199,15 @@ private fun StudentHomeContent(
         }
 
         // ── Search shortcut ───────────────────────────────────────────────────
+        // enabled=false: the text field must not swallow taps — the whole field
+        // is a navigation shortcut into the Find flow.
         SearchField(
             value = "",
             onValueChange = {},
             placeholder = "Find a tutor or subject…",
             big = true,
             readOnly = true,
+            enabled = false,
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(
@@ -311,7 +316,6 @@ private fun TutorTodayContent(
     val displayName = state.currentUser?.displayName.orEmpty()
     val firstName = displayName.split(" ").firstOrNull().orEmpty()
     val greeting = greetingForHour(LocalTime.now().hour)
-    val hasUnread = state.dashboardState.notificationCount > 0
     val allTutorBookings = state.dashboardState.myTutorBookings
     val todayStr = LocalDate.now().toString()
 
@@ -357,13 +361,15 @@ private fun TutorTodayContent(
                 SoftIconButton(
                     icon = SoftIcons.bell,
                     onClick = onOpenNotifications,
-                    dot = hasUnread
+                    badgeCount = state.dashboardState.notificationCount
                 )
             }
         )
 
         // ── Role switch ───────────────────────────────────────────────────────
         RoleSwitch(isTutor = true, onToggle = onToggleRole, fullWidth = true)
+
+        MessageBlock(state.errorMessage, state.infoMessage)
 
         // ── Today summary hero card ───────────────────────────────────────────
         TutorSummaryHeroCard(
