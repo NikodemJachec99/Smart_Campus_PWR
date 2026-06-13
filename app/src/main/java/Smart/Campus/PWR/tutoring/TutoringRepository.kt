@@ -677,7 +677,9 @@ class TutoringRepository(
         tutorUid: String,
         bookingId: String,
         rating: Int,
-        comment: String
+        comment: String,
+        tags: List<String> = emptyList(),
+        anonymous: Boolean = false
     ) {
         val normalizedComment = comment.trim()
         val normalizedTutorUid = tutorUid.trim()
@@ -691,7 +693,9 @@ class TutoringRepository(
                 student = student,
                 bookingId = normalizedBookingId,
                 rating = rating,
-                comment = normalizedComment
+                comment = normalizedComment,
+                tags = tags,
+                anonymous = anonymous
             )
         } else {
             require(normalizedTutorUid.isNotEmpty()) { "Select tutor." }
@@ -706,6 +710,8 @@ class TutoringRepository(
                 "studentDisplayName" to student.displayName,
                 "rating" to rating,
                 "comment" to normalizedComment,
+                "tags" to tags,
+                "anonymous" to anonymous,
                 "createdAt" to FieldValue.serverTimestamp()
             )
         }
@@ -724,7 +730,9 @@ class TutoringRepository(
         student: AppUser,
         bookingId: String,
         rating: Int,
-        comment: String
+        comment: String,
+        tags: List<String> = emptyList(),
+        anonymous: Boolean = false
     ): Map<String, Any> {
         val bookingSnapshot = firestore.collection("bookings").document(bookingId).get().await()
         if (!bookingSnapshot.exists()) {
@@ -781,6 +789,8 @@ class TutoringRepository(
             "subject" to subject,
             "lessonDate" to date,
             "lessonTime" to "$startHour - $endHour",
+            "tags" to tags,
+            "anonymous" to anonymous,
             "createdAt" to FieldValue.serverTimestamp()
         )
     }
@@ -855,10 +865,13 @@ class TutoringRepository(
 
             var tutorUsers = emptyList<AppUser>()
             var lecturerUsers = emptyList<AppUser>()
+            var cachedReviews = emptyList<TutorReviewUi>()
             fun emitTutors() {
+                val ratingStats = TutorRatings.aggregateRatings(cachedReviews)
                 val tutors = (tutorUsers + lecturerUsers)
                     .distinctBy { it.uid }
                     .map { appUser ->
+                        val stats = ratingStats[appUser.uid]
                         TutorSummaryUi(
                             uid = appUser.uid,
                             displayName = appUser.displayName,
@@ -866,12 +879,24 @@ class TutoringRepository(
                             bio = appUser.bio.orEmpty(),
                             subjectsList = appUser.subjects,
                             verified = appUser.verified,
-                            experienceYears = appUser.experienceYears
+                            experienceYears = appUser.experienceYears,
+                            ratingAvg = stats?.avg ?: 0.0,
+                            ratingCount = stats?.count ?: 0
                         )
                     }
                     .sortedBy { it.displayName.lowercase(Locale.getDefault()) }
                 emit(current.copy(tutors = tutors))
             }
+
+            registrations += firestore.collection("reviews")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        onError(error)
+                    } else {
+                        cachedReviews = snapshot?.documents.orEmpty().mapNotNull(::toReview)
+                        emitTutors()
+                    }
+                }
 
             registrations += firestore.collection("users")
                 .whereArrayContains("roles", "tutor")
@@ -945,10 +970,17 @@ class TutoringRepository(
         }
     }
 
-    suspend fun createReport(student: AppUser, tutorUid: String, reason: String, details: String) {
+    suspend fun createReport(
+        student: AppUser,
+        tutorUid: String,
+        reason: String,
+        details: String,
+        severity: String = "MEDIUM"
+    ) {
         val normalizedTutorUid = tutorUid.trim()
         val normalizedReason = reason.trim()
         val normalizedDetails = details.trim()
+        val normalizedSeverity = severity.trim().uppercase(Locale.getDefault())
 
         require(normalizedTutorUid.isNotEmpty()) { "Select tutor." }
         require(normalizedReason.isNotEmpty()) { "Reason is required." }
@@ -965,6 +997,7 @@ class TutoringRepository(
                 "reason" to normalizedReason,
                 "details" to normalizedDetails,
                 "status" to "open",
+                "severity" to normalizedSeverity,
                 "createdAt" to FieldValue.serverTimestamp()
             )
         ).await()
@@ -975,19 +1008,30 @@ class TutoringRepository(
             .sortedByDescending { it.createdAtLabel }
     }
 
-    suspend fun updateReportStatus(reportId: String, status: String, user: AppUser) {
+    suspend fun updateReportStatus(
+        reportId: String,
+        status: String,
+        user: AppUser,
+        note: String = ""
+    ) {
         require(user.hasRole(UserRole.ADMIN)) { "Only admins can moderate reports." }
         require(reportId.isNotBlank()) { "Report ID cannot be empty." }
         val normalizedStatus = status.trim().lowercase(Locale.getDefault())
-        require(normalizedStatus in setOf("open", "resolved", "dismissed")) { "Unsupported report status." }
+        require(normalizedStatus in setOf("open", "in_review", "resolved", "dismissed")) {
+            "Unsupported report status."
+        }
 
-        firestore.collection("reports").document(reportId).update(
-            mapOf(
-                "status" to normalizedStatus,
-                "reviewedBy" to user.uid,
-                "reviewedAt" to FieldValue.serverTimestamp()
-            )
-        ).await()
+        val update = mutableMapOf<String, Any>(
+            "status" to normalizedStatus,
+            "reviewedBy" to user.uid,
+            "reviewedAt" to FieldValue.serverTimestamp()
+        )
+        val normalizedNote = note.trim()
+        if (normalizedNote.isNotBlank()) {
+            update["moderatorNote"] = normalizedNote
+        }
+
+        firestore.collection("reports").document(reportId).update(update).await()
     }
 
     suspend fun loadAdminUserInspector(user: AppUser): AdminUserInspectorUi {
@@ -1107,7 +1151,11 @@ class TutoringRepository(
             .distinctBy { it.id }
             .mapNotNull(::toUser)
 
+        val allReviews = firestore.collection("reviews").get().await().documents.mapNotNull(::toReview)
+        val ratingStats = TutorRatings.aggregateRatings(allReviews)
+
         return users.map { appUser ->
+            val stats = ratingStats[appUser.uid]
             TutorSummaryUi(
                 uid = appUser.uid,
                 displayName = appUser.displayName,
@@ -1115,7 +1163,9 @@ class TutoringRepository(
                 bio = appUser.bio.orEmpty(),
                 subjectsList = appUser.subjects,
                 verified = appUser.verified,
-                experienceYears = appUser.experienceYears
+                experienceYears = appUser.experienceYears,
+                ratingAvg = stats?.avg ?: 0.0,
+                ratingCount = stats?.count ?: 0
             )
         }.sortedBy { it.displayName.lowercase(Locale.getDefault()) }
     }

@@ -28,6 +28,7 @@ import Smart.Campus.PWR.ui.components.softindigo.StarsRow
 import Smart.Campus.PWR.ui.components.softindigo.SubjectDot
 import Smart.Campus.PWR.ui.components.softindigo.subjectColors
 import Smart.Campus.PWR.ui.icons.SoftIcons
+import Smart.Campus.PWR.tutoring.TutorRatings
 import Smart.Campus.PWR.ui.state.DashboardUiState
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
 import Smart.Campus.PWR.ui.state.TutorAvailabilityUi
@@ -1766,15 +1767,14 @@ private fun TutorScheduleScreen(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-private fun filteredTutorSlots(state: SmartCampusUiState) =
-    state.dashboardState.availableTutorSlots.filter { slot ->
-        val filters = state.tutorSearchFilters
-        val tutorQuery = filters.tutorQuery.trim()
-        val subjectQuery = filters.subjectQuery.trim()
-        val matchesTutor = tutorQuery.isBlank() ||
-                slot.tutorDisplayName.contains(tutorQuery, ignoreCase = true)
-        val matchesSubject = subjectQuery.isBlank() ||
-                slot.subject.contains(subjectQuery, ignoreCase = true)
-        val matchesDate = filters.date.isBlank() || slot.dateLabel == filters.date
-        matchesTutor && matchesSubject && matchesDate
-    }
+private fun filteredTutorSlots(state: SmartCampusUiState): List<TutorAvailabilityUi> {
+    val ratingByTutor = state.dashboardState.tutors
+        .associate { it.uid to it.ratingAvg }
+    val today = LocalDate.now().toString()
+    return TutorRatings.applyTutorSearch(
+        slots = state.dashboardState.availableTutorSlots,
+        ratingByTutor = ratingByTutor,
+        filter = state.tutorSearchFilters,
+        today = today
+    )
+}
