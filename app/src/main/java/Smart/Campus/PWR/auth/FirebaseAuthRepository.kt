@@ -205,6 +205,49 @@ class FirebaseAuthRepository(
         )
     }
 
+    /**
+     * Self-edit: the signed-in tutor updates their own profile fields.
+     * Direct Firestore write to users/{uid} — security rules enforce that only the
+     * owner (or admin) can mutate these fields.
+     */
+    suspend fun updateTutorProfile(
+        uid: String,
+        bio: String,
+        subjects: List<String>,
+        experienceYears: Int?,
+        program: String,
+        studyYear: String,
+        faculty: String
+    ) {
+        val update = buildMap<String, Any> {
+            put("bio", bio.trim())
+            put("subjects", subjects.map { it.trim() })
+            put("program", program.trim())
+            put("studyYear", studyYear.trim())
+            put("faculty", faculty.trim())
+            put("updatedAt", FieldValue.serverTimestamp())
+            if (experienceYears != null) put("experienceYears", experienceYears)
+        }
+
+        firestore.collection("users").document(uid).update(update).await()
+    }
+
+    /**
+     * Admin: flip the verified flag on any tutor document.
+     * Direct Firestore write — security rules gate this to admin-role callers.
+     * (Other admin mutations in this repo go through callable Cloud Functions;
+     * this field is a simple boolean toggle that does not require Auth custom-claim
+     * changes, so a direct write is used here instead.)
+     */
+    suspend fun adminSetVerified(uid: String, verified: Boolean) {
+        firestore.collection("users").document(uid).update(
+            mapOf(
+                "verified" to verified,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
+    }
+
     suspend fun getUserByUid(uid: String): AppUser? {
         val snapshot = firestore.collection("users").document(uid).get().await()
         if (!snapshot.exists()) {
