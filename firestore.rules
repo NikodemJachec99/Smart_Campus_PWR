@@ -51,6 +51,123 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/courses/$(courseId)).data.tutorUid == request.auth.uid;
     }
 
+    function isCourseParticipant(courseId) {
+      return isCourseMember(courseId) || isCourseOwner(courseId);
+    }
+
+    function allowedChatMimeTypes() {
+      return ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    }
+
+    function allowedReactionKeys() {
+      return ['like', 'thanks', 'plus1'];
+    }
+
+    function hasValidChatAttachment(data) {
+      return !data.keys().hasAny(['attachment'])
+        || (
+          data.attachment is map
+          && data.attachment.fileName is string
+          && data.attachment.fileName.size() > 0
+          && data.attachment.fileName.size() <= 180
+          && data.attachment.mimeType in allowedChatMimeTypes()
+          && data.attachment.sizeBytes is int
+          && data.attachment.sizeBytes > 0
+          && data.attachment.sizeBytes < 10 * 1024 * 1024
+          && data.attachment.storagePath is string
+          && data.attachment.downloadUrl is string
+          && data.attachment.keys().hasOnly([
+            'fileName',
+            'mimeType',
+            'sizeBytes',
+            'storagePath',
+            'downloadUrl',
+            'width',
+            'height'
+          ])
+        );
+    }
+
+    function hasValidReplyPreview(data) {
+      return !data.keys().hasAny(['replyTo'])
+        || (
+          data.replyTo is map
+          && data.replyTo.messageId is string
+          && data.replyTo.senderName is string
+          && data.replyTo.textPreview is string
+          && data.replyTo.textPreview.size() <= 160
+          && data.replyTo.attachmentName is string
+          && data.replyTo.attachmentName.size() <= 180
+          && data.replyTo.keys().hasOnly([
+            'messageId',
+            'senderName',
+            'textPreview',
+            'attachmentName'
+          ])
+        );
+    }
+
+    function isValidChatMessageCreate(announcementAllowed) {
+      return request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.senderName is string
+        && request.resource.data.senderName.size() > 0
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 2000
+        && (request.resource.data.text.size() > 0 || request.resource.data.keys().hasAny(['attachment']))
+        && (!request.resource.data.keys().hasAny(['messageType'])
+          || request.resource.data.messageType in ['text', 'image', 'file'])
+        && (
+          !request.resource.data.keys().hasAny(['attachment'])
+          || request.resource.data.messageType in ['image', 'file']
+        )
+        && request.resource.data.clientMessageId is string
+        && request.resource.data.clientMessageId.size() > 0
+        && request.resource.data.isAnnouncement is bool
+        && (request.resource.data.isAnnouncement == false || announcementAllowed)
+        && hasValidChatAttachment(request.resource.data)
+        && hasValidReplyPreview(request.resource.data)
+        && request.resource.data.keys().hasOnly([
+          'senderUid',
+          'senderName',
+          'text',
+          'isAnnouncement',
+          'clientMessageId',
+          'messageType',
+          'attachment',
+          'replyTo',
+          'sentAt'
+        ]);
+    }
+
+    function isOwnSoftDelete() {
+      return isSignedIn()
+        && resource.data.senderUid == request.auth.uid
+        && request.resource.data.text == ''
+        && request.resource.data.messageType == 'text'
+        && request.resource.data.deletedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'text',
+          'messageType',
+          'attachment',
+          'deletedAt',
+          'deletedBy'
+        ]);
+    }
+
+    function isReactionSummaryUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'reactionBy',
+        'reactionCounts'
+      ]);
+    }
+
+    function isValidReactionWrite(uid) {
+      return isSignedIn()
+        && uid == request.auth.uid
+        && request.resource.data.reactionKey in allowedReactionKeys()
+        && request.resource.data.keys().hasOnly(['reactionKey', 'createdAt']);
+    }
+
     function availabilityPath(slotId) {
       return /databases/$(database)/documents/tutor_availability/$(slotId);
     }
@@ -83,6 +200,8 @@ service cloud.firestore {
         && request.resource.data.endHour is string
         && request.resource.data.isBooked == false
         && hasFutureWindow(request.resource.data)
+        && (!request.resource.data.keys().hasAny(['status']) || request.resource.data.status == 'open')
+        && (!request.resource.data.keys().hasAny(['format']) || request.resource.data.format in ['ONLINE', 'IN_PERSON'])
         && request.resource.data.keys().hasOnly([
           'tutorId',
           'tutorDisplayName',
@@ -93,8 +212,31 @@ service cloud.firestore {
           'startAt',
           'endAt',
           'isBooked',
-          'createdAt'
+          'createdAt',
+          'durationMinutes',
+          'format',
+          'location',
+          'meetingUrl',
+          'topic',
+          'status'
         ]);
+    }
+
+    function isSlotStatusTransition() {
+      // Only status field (and optional updatedAt) changes
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && (
+          // Tutor: pending -> booked / pending -> open / booked -> open
+          (resource.data.tutorId == request.auth.uid && (
+            (resource.data.status == 'pending' && request.resource.data.status in ['booked', 'open'])
+            || (resource.data.status == 'booked' && request.resource.data.status == 'open')
+          ))
+          // Student: open -> pending (request)
+          || (isStudent() && resource.data.tutorId != request.auth.uid
+              && resource.data.status == 'open' && request.resource.data.status == 'pending')
+          // Admin: any transition
+          || isAdmin()
+        );
     }
 
     function isAvailabilityScheduleEdit() {
@@ -108,6 +250,7 @@ service cloud.firestore {
         && request.resource.data.startHour is string
         && request.resource.data.endHour is string
         && hasFutureWindow(request.resource.data)
+        && (!request.resource.data.keys().hasAny(['format']) || request.resource.data.format in ['ONLINE', 'IN_PERSON'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'subject',
           'date',
@@ -115,7 +258,12 @@ service cloud.firestore {
           'endHour',
           'startAt',
           'endAt',
-          'updatedAt'
+          'updatedAt',
+          'durationMinutes',
+          'format',
+          'location',
+          'meetingUrl',
+          'topic'
         ]);
     }
 
@@ -137,14 +285,15 @@ service cloud.firestore {
         && (!resource.data.keys().hasAny(['endAt']) || request.resource.data.endAt == resource.data.endAt)
         && getAfter(bookingPath(request.resource.data.bookingId)).data.availabilityId == slotId
         && getAfter(bookingPath(request.resource.data.bookingId)).data.studentId == request.auth.uid
-        && getAfter(bookingPath(request.resource.data.bookingId)).data.status == 'booked'
+        && getAfter(bookingPath(request.resource.data.bookingId)).data.status in ['booked', 'PENDING']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'isBooked',
           'bookingId',
           'bookedBy',
           'bookedAt',
           'startAt',
-          'endAt'
+          'endAt',
+          'status'
         ]);
     }
 
@@ -153,20 +302,21 @@ service cloud.firestore {
         && (
           resource.data.bookedBy == request.auth.uid
           || resource.data.tutorId == request.auth.uid
+          || isAdmin()
         )
         && resource.data.isBooked == true
         && request.resource.data.isBooked == false
         && !request.resource.data.keys().hasAny(['bookingId', 'bookedBy', 'bookedAt'])
         && resource.data.bookingId is string
-        && getAfter(bookingPath(resource.data.bookingId)).data.status == 'cancelled'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isBooked', 'bookingId', 'bookedBy', 'bookedAt']);
+        && getAfter(bookingPath(resource.data.bookingId)).data.status in ['cancelled', 'CANCELLED', 'DECLINED']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isBooked', 'bookingId', 'bookedBy', 'bookedAt', 'status']);
     }
 
     function isValidStudentBookingCreate(bookingId) {
       return isStudent()
         && request.resource.data.studentId == request.auth.uid
         && request.resource.data.tutorId != request.auth.uid
-        && request.resource.data.status == 'booked'
+        && request.resource.data.status in ['booked', 'PENDING']
         && request.resource.data.availabilityId is string
         && exists(availabilityPath(request.resource.data.availabilityId))
         && get(availabilityPath(request.resource.data.availabilityId)).data.isBooked == false
@@ -185,6 +335,7 @@ service cloud.firestore {
         && request.resource.data.lessonEndsAt > request.resource.data.lessonStartsAt
         && request.resource.data.lessonStartsAt == getAfter(availabilityPath(request.resource.data.availabilityId)).data.startAt
         && request.resource.data.lessonEndsAt == getAfter(availabilityPath(request.resource.data.availabilityId)).data.endAt
+        && (!request.resource.data.keys().hasAny(['format']) || request.resource.data.format in ['ONLINE', 'IN_PERSON'])
         && request.resource.data.keys().hasOnly([
           'availabilityId',
           'tutorId',
@@ -198,15 +349,53 @@ service cloud.firestore {
           'status',
           'lessonStartsAt',
           'lessonEndsAt',
-          'createdAt'
+          'createdAt',
+          'format',
+          'location',
+          'meetingUrl',
+          'notes'
         ]);
+    }
+
+    function isTutorStatusUpdate() {
+      // Tutor (or admin) may move booking to CONFIRMED/DECLINED/COMPLETED/NO_SHOW
+      return (resource.data.tutorId == request.auth.uid || isAdmin())
+        && request.resource.data.status in ['CONFIRMED', 'DECLINED', 'COMPLETED', 'NO_SHOW']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'updatedAt',
+          'tutorNote'
+        ]);
+    }
+
+    function isRescheduleOrCancel() {
+      // A participant (student or tutor) or admin may reschedule or cancel
+      return isBookingParticipant(resource.data)
+        && resource.data.status in ['PENDING', 'CONFIRMED', 'booked']
+        && (
+          // Cancel
+          (request.resource.data.status in ['CANCELLED', 'cancelled']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'cancelReason', 'cancelledBy', 'cancelledAt', 'updatedAt'
+            ])
+          )
+          ||
+          // Reschedule (change time/location fields)
+          (request.resource.data.status == resource.data.status
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'availabilityId', 'date', 'startHour', 'endHour',
+              'lessonStartsAt', 'lessonEndsAt', 'format', 'location', 'meetingUrl',
+              'updatedAt', 'rescheduledBy', 'rescheduledAt'
+            ])
+          )
+        );
     }
 
     function isCancellingBooking() {
       return isBookingParticipant(resource.data)
-        && resource.data.status == 'booked'
+        && resource.data.status in ['booked', 'PENDING', 'CONFIRMED']
         && resource.data.availabilityId is string
-        && request.resource.data.status == 'cancelled'
+        && request.resource.data.status in ['cancelled', 'CANCELLED']
         && request.resource.data.cancelReason is string
         && request.resource.data.cancelReason.size() > 0
         && request.resource.data.cancelReason.size() <= 500
@@ -217,7 +406,8 @@ service cloud.firestore {
           'status',
           'cancelReason',
           'cancelledBy',
-          'cancelledAt'
+          'cancelledAt',
+          'updatedAt'
         ]);
     }
 
@@ -226,7 +416,9 @@ service cloud.firestore {
         && request.resource.data.rating >= 1
         && request.resource.data.rating <= 5
         && request.resource.data.comment is string
-        && request.resource.data.comment.size() > 0;
+        && request.resource.data.comment.size() > 0
+        && (!request.resource.data.keys().hasAny(['tags']) || request.resource.data.tags is list)
+        && (!request.resource.data.keys().hasAny(['anonymous']) || request.resource.data.anonymous is bool);
     }
 
     function isGeneralTutorReview() {
@@ -247,7 +439,7 @@ service cloud.firestore {
         && exists(bookingPath(request.resource.data.bookingId))
         && get(bookingPath(request.resource.data.bookingId)).data.studentId == request.auth.uid
         && get(bookingPath(request.resource.data.bookingId)).data.tutorId == request.resource.data.tutorId
-        && get(bookingPath(request.resource.data.bookingId)).data.status == 'booked'
+        && get(bookingPath(request.resource.data.bookingId)).data.status in ['booked', 'COMPLETED']
         && get(bookingPath(request.resource.data.bookingId)).data.lessonEndsAt is timestamp
         && get(bookingPath(request.resource.data.bookingId)).data.lessonEndsAt <= request.time;
     }
@@ -262,7 +454,18 @@ service cloud.firestore {
 
       allow update: if isAdmin()
         || (isOwner(uid)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens', 'updatedAt']));
+          // Owner may not change `verified` — that field is admin-only
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['verified'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'fcmTokens',
+            'updatedAt',
+            'bio',
+            'subjects',
+            'experienceYears',
+            'program',
+            'studyYear',
+            'faculty'
+          ]));
       allow delete: if false;
     }
 
@@ -275,7 +478,8 @@ service cloud.firestore {
       allow update: if ((isAdmin() || (isTutor() && resource.data.tutorId == request.auth.uid))
           && isAvailabilityScheduleEdit())
         || isCancellingAvailabilitySlot()
-        || isBookingAvailabilitySlot(slotId);
+        || isBookingAvailabilitySlot(slotId)
+        || (isSignedIn() && isSlotStatusTransition());
 
       allow delete: if isAdmin()
         || (isTutor() && resource.data.tutorId == request.auth.uid && resource.data.isBooked == false);
@@ -289,7 +493,10 @@ service cloud.firestore {
         ));
 
       allow create: if isValidStudentBookingCreate(bookingId);
-      allow update: if isAdmin() || isCancellingBooking();
+      allow update: if isAdmin()
+        || isCancellingBooking()
+        || isTutorStatusUpdate()
+        || isRescheduleOrCancel();
       allow delete: if isAdmin();
     }
 
@@ -311,9 +518,21 @@ service cloud.firestore {
 
       allow create: if isStudent()
         && request.resource.data.studentId == request.auth.uid
-        && request.resource.data.tutorId != request.auth.uid;
+        && request.resource.data.tutorId != request.auth.uid
+        && request.resource.data.status == 'open'
+        && (!request.resource.data.keys().hasAny(['severity'])
+          || request.resource.data.severity in ['LOW', 'MEDIUM', 'HIGH'])
+        // Prevent student from pre-writing admin-only fields
+        && !request.resource.data.keys().hasAny(['moderatorNote']);
 
-      allow update, delete: if isAdmin();
+      // Admin may update status (open/in_review/resolved/dismissed) and add moderatorNote
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'moderatorNote', 'updatedAt', 'resolvedAt'
+        ])
+        && request.resource.data.status in ['open', 'in_review', 'resolved', 'dismissed'];
+
+      allow delete: if isAdmin();
     }
 
     match /classes/{classId} {
@@ -367,8 +586,12 @@ service cloud.firestore {
         && request.resource.data.name.size() > 0
         && request.resource.data.memberCount == 0;
 
-      allow update: if (isAdmin() || (isTutor() && resource.data.tutorUid == request.auth.uid))
-        && request.resource.data.tutorUid == resource.data.tutorUid;
+      allow update: if ((isAdmin() || (isTutor() && resource.data.tutorUid == request.auth.uid))
+          && request.resource.data.tutorUid == resource.data.tutorUid)
+        || (isCourseParticipant(courseId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadAtBy']))
+        || (isCourseParticipant(courseId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['typing']));
 
       allow delete: if isAdmin()
         || (isTutor() && resource.data.tutorUid == request.auth.uid);
@@ -393,12 +616,18 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isCourseMember(courseId) || isCourseOwner(courseId) || isAdmin();
         allow create: if (isCourseMember(courseId) || isCourseOwner(courseId))
-          && request.resource.data.senderUid == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 2000
-          && (request.resource.data.isAnnouncement == false || isCourseOwner(courseId) || isAdmin());
-        allow update, delete: if isAdmin();
+          && isValidChatMessageCreate(isCourseOwner(courseId) || isAdmin());
+        allow update: if isAdmin()
+          || ((isCourseMember(courseId) || isCourseOwner(courseId)) && (isOwnSoftDelete() || isReactionSummaryUpdate()));
+        allow delete: if isAdmin();
+
+        match /reactions/{uid} {
+          allow read: if isCourseMember(courseId) || isCourseOwner(courseId) || isAdmin();
+          allow create, update: if (isCourseMember(courseId) || isCourseOwner(courseId))
+            && isValidReactionWrite(uid);
+          allow delete: if (isCourseMember(courseId) || isCourseOwner(courseId))
+            && uid == request.auth.uid;
+        }
       }
     }
 
@@ -406,28 +635,71 @@ service cloud.firestore {
       function isParticipant() {
         return isSignedIn() && request.auth.uid in resource.data.participants;
       }
+      function isReadReceiptUpdate() {
+        return isParticipant()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadAtBy']);
+      }
+      function isTypingUpdate() {
+        return isParticipant()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['typing']);
+      }
       allow read: if isParticipant() || isAdmin();
       allow create: if isSignedIn()
         && request.resource.data.type == 'direct'
         && request.auth.uid in request.resource.data.participants
         && request.resource.data.participants.size() == 2;
       allow update: if isAdmin()
-        || (isParticipant()
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['lastMessageText', 'lastMessageSenderName', 'lastMessageAt']));
+        || isReadReceiptUpdate()
+        || isTypingUpdate();
       allow delete: if isAdmin();
 
       match /messages/{messageId} {
         allow read: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
         allow create: if isSignedIn()
-          && request.resource.data.senderUid == request.auth.uid
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 2000;
-        allow update, delete: if isAdmin();
+          && isValidChatMessageCreate(false);
+        allow update: if isAdmin()
+          || (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+            && (isOwnSoftDelete() || isReactionSummaryUpdate()));
+        allow delete: if isAdmin();
+
+        match /reactions/{uid} {
+          allow read: if isSignedIn()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+          allow create, update: if isSignedIn()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+            && isValidReactionWrite(uid);
+          allow delete: if isSignedIn()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+            && uid == request.auth.uid;
+        }
       }
+    }
+
+    match /message_reports/{reportId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.threadKind in ['direct', 'course']
+        && request.resource.data.threadId is string
+        && request.resource.data.messageId is string
+        && request.resource.data.messageSenderUid is string
+        && request.resource.data.textPreview is string
+        && request.resource.data.textPreview.size() <= 300
+        && request.resource.data.attachmentName is string
+        && request.resource.data.status == 'open'
+        && request.resource.data.keys().hasOnly([
+          'threadKind',
+          'threadId',
+          'messageId',
+          'messageSenderUid',
+          'reporterUid',
+          'textPreview',
+          'attachmentName',
+          'status',
+          'createdAt'
+        ]);
     }
 
     match /notifications/{notificationId} {
