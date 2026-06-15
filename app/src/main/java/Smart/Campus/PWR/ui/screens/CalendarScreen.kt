@@ -32,6 +32,7 @@ import Smart.Campus.PWR.tutoring.TutorRatings
 import Smart.Campus.PWR.ui.state.DashboardUiState
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
 import Smart.Campus.PWR.ui.state.TutorAvailabilityUi
+import Smart.Campus.PWR.ui.state.TutorSummaryUi
 import Smart.Campus.PWR.ui.theme.Bg
 import Smart.Campus.PWR.ui.theme.Bg2
 import Smart.Campus.PWR.ui.theme.BodyFontFamily
@@ -50,6 +51,7 @@ import Smart.Campus.PWR.ui.theme.Primary600
 import Smart.Campus.PWR.ui.theme.SoftType
 import Smart.Campus.PWR.ui.theme.Star
 import Smart.Campus.PWR.ui.theme.White
+import Smart.Campus.PWR.ui.util.buildAddToCalendarIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,12 +96,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
@@ -125,13 +130,25 @@ fun CalendarTab(
     onAvailabilityDateChanged: (String) -> Unit,
     onAvailabilityStartHourChanged: (String) -> Unit,
     onAvailabilityEndHourChanged: (String) -> Unit,
+    onAvailabilityDurationChanged: (Int) -> Unit,
+    onAvailabilityFormatChanged: (String) -> Unit,
+    onAvailabilityLocationChanged: (String) -> Unit,
+    onAvailabilityMeetingUrlChanged: (String) -> Unit,
+    onAvailabilityTopicChanged: (String) -> Unit,
     onAddAvailability: () -> Unit,
     onBookTutorSlot: (String) -> Unit,
+    onStartBookingRequest: (String) -> Unit,
+    onBookingRequestMessageChanged: (String) -> Unit,
+    onBookingRequestTopicChanged: (String) -> Unit,
     onDeleteAvailability: (String) -> Unit,
     onCancelBooking: (String, String, String) -> Unit,
     onTutorSearchTutorChanged: (String) -> Unit,
     onTutorSearchSubjectChanged: (String) -> Unit,
     onTutorSearchDateChanged: (String) -> Unit,
+    onTutorSearchFormatChanged: (String?) -> Unit,
+    onTutorSearchMinRatingChanged: (Int?) -> Unit,
+    onTutorSearchAvailableTodayChanged: (Boolean) -> Unit,
+    onTutorSearchSortChanged: (String) -> Unit,
     onClearTutorSearchFilters: () -> Unit
 ) {
     Box(
@@ -147,6 +164,11 @@ fun CalendarTab(
                 onAvailabilityDateChanged = onAvailabilityDateChanged,
                 onAvailabilityStartHourChanged = onAvailabilityStartHourChanged,
                 onAvailabilityEndHourChanged = onAvailabilityEndHourChanged,
+                onAvailabilityDurationChanged = onAvailabilityDurationChanged,
+                onAvailabilityFormatChanged = onAvailabilityFormatChanged,
+                onAvailabilityLocationChanged = onAvailabilityLocationChanged,
+                onAvailabilityMeetingUrlChanged = onAvailabilityMeetingUrlChanged,
+                onAvailabilityTopicChanged = onAvailabilityTopicChanged,
                 onAddAvailability = onAddAvailability,
                 onDeleteAvailability = onDeleteAvailability,
                 onCancelBooking = onCancelBooking
@@ -155,10 +177,17 @@ fun CalendarTab(
             StudentFindFlow(
                 state = state,
                 onBookTutorSlot = onBookTutorSlot,
+                onStartBookingRequest = onStartBookingRequest,
+                onBookingRequestMessageChanged = onBookingRequestMessageChanged,
+                onBookingRequestTopicChanged = onBookingRequestTopicChanged,
                 onClearMessages = onClearMessages,
                 onTutorSearchTutorChanged = onTutorSearchTutorChanged,
                 onTutorSearchSubjectChanged = onTutorSearchSubjectChanged,
                 onTutorSearchDateChanged = onTutorSearchDateChanged,
+                onTutorSearchFormatChanged = onTutorSearchFormatChanged,
+                onTutorSearchMinRatingChanged = onTutorSearchMinRatingChanged,
+                onTutorSearchAvailableTodayChanged = onTutorSearchAvailableTodayChanged,
+                onTutorSearchSortChanged = onTutorSearchSortChanged,
                 onClearTutorSearchFilters = onClearTutorSearchFilters
             )
         }
@@ -173,10 +202,17 @@ fun CalendarTab(
 private fun StudentFindFlow(
     state: SmartCampusUiState,
     onBookTutorSlot: (String) -> Unit,
+    onStartBookingRequest: (String) -> Unit,
+    onBookingRequestMessageChanged: (String) -> Unit,
+    onBookingRequestTopicChanged: (String) -> Unit,
     onClearMessages: () -> Unit,
     onTutorSearchTutorChanged: (String) -> Unit,
     onTutorSearchSubjectChanged: (String) -> Unit,
     onTutorSearchDateChanged: (String) -> Unit,
+    onTutorSearchFormatChanged: (String?) -> Unit,
+    onTutorSearchMinRatingChanged: (Int?) -> Unit,
+    onTutorSearchAvailableTodayChanged: (Boolean) -> Unit,
+    onTutorSearchSortChanged: (String) -> Unit,
     onClearTutorSearchFilters: () -> Unit
 ) {
     var step: StudentStep by remember { mutableStateOf(StudentStep.Find) }
@@ -192,6 +228,10 @@ private fun StudentFindFlow(
             onTutorSearchTutorChanged = onTutorSearchTutorChanged,
             onTutorSearchSubjectChanged = onTutorSearchSubjectChanged,
             onTutorSearchDateChanged = onTutorSearchDateChanged,
+            onTutorSearchFormatChanged = onTutorSearchFormatChanged,
+            onTutorSearchMinRatingChanged = onTutorSearchMinRatingChanged,
+            onTutorSearchAvailableTodayChanged = onTutorSearchAvailableTodayChanged,
+            onTutorSearchSortChanged = onTutorSearchSortChanged,
             onClearTutorSearchFilters = onClearTutorSearchFilters,
             onBack = { step = StudentStep.Find },
             onOpenProfile = { tutorId, tutorName ->
@@ -210,6 +250,9 @@ private fun StudentFindFlow(
             tutorId = s.tutorId,
             tutorName = s.tutorName,
             onBack = { step = StudentStep.Profile(s.tutorId, s.tutorName) },
+            onStartBookingRequest = onStartBookingRequest,
+            onBookingRequestMessageChanged = onBookingRequestMessageChanged,
+            onBookingRequestTopicChanged = onBookingRequestTopicChanged,
             onConfirm = { slotId, slot ->
                 onClearMessages()
                 onBookTutorSlot(slotId)
@@ -217,6 +260,7 @@ private fun StudentFindFlow(
             }
         )
         is StudentStep.Confirm -> ScreenBookingConfirm(
+            state = state,
             slot = s.slot,
             onClose = { step = StudentStep.Find }
         )
@@ -265,14 +309,14 @@ private fun ScreenFind(
 
             Spacer(Modifier.height(12.dp))
 
-            // Filter chips — DESIGN-PLACEHOLDER: no format/mode filter callback in VM
+            // Filter chips
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.horizontalScroll(rememberScrollState())
             ) {
-                Chip(text = "All", selected = true) // DESIGN-PLACEHOLDER
-                Chip(text = "Online", leadingIcon = SoftIcons.globe) // DESIGN-PLACEHOLDER
-                Chip(text = "In person", leadingIcon = SoftIcons.pin) // DESIGN-PLACEHOLDER
+                Chip(text = "All", selected = true) // DESIGN-PLACEHOLDER: navigates to results with no filter
+                Chip(text = "Online", leadingIcon = SoftIcons.globe) { onNavigateResults() }
+                Chip(text = "In person", leadingIcon = SoftIcons.pin) { onNavigateResults() }
                 Chip(text = "Filters", leadingIcon = SoftIcons.sliders) { onNavigateResults() }
             }
 
@@ -295,7 +339,7 @@ private fun ScreenFind(
                             .clip(RoundedCornerShape(16.dp))
                             .background(CardSurface)
                             .border(1.dp, Line, RoundedCornerShape(16.dp))
-                            .clickable { onNavigateResults() } // DESIGN-PLACEHOLDER
+                            .clickable { onNavigateResults() }
                             .padding(15.dp)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -431,6 +475,10 @@ private fun ScreenFindResults(
     onTutorSearchTutorChanged: (String) -> Unit,
     onTutorSearchSubjectChanged: (String) -> Unit,
     onTutorSearchDateChanged: (String) -> Unit,
+    onTutorSearchFormatChanged: (String?) -> Unit,
+    onTutorSearchMinRatingChanged: (Int?) -> Unit,
+    onTutorSearchAvailableTodayChanged: (Boolean) -> Unit,
+    onTutorSearchSortChanged: (String) -> Unit,
     onClearTutorSearchFilters: () -> Unit,
     onBack: () -> Unit,
     onOpenProfile: (String, String) -> Unit
@@ -449,6 +497,11 @@ private fun ScreenFindResults(
             }
         }
     )
+
+    // Tutor map for rating look-up
+    val tutorMap = remember(state.dashboardState.tutors) {
+        state.dashboardState.tutors.associateBy { it.uid }
+    }
 
     // Build per-tutor result cards from availableTutorSlots
     val tutorSlotMap = remember(state.dashboardState.availableTutorSlots, filters) {
@@ -549,7 +602,8 @@ private fun ScreenFindResults(
                     selected = filters.date.isNotBlank(),
                     leadingIcon = SoftIcons.calendar
                 ) { showDatePicker = true }
-                // Tutor filter chip (wire to onTutorSearchTutorChanged quick-clear)
+
+                // Tutor filter chip (quick-clear)
                 if (filters.tutorQuery.isNotBlank()) {
                     Chip(
                         text = filters.tutorQuery,
@@ -557,9 +611,49 @@ private fun ScreenFindResults(
                         leadingIcon = SoftIcons.user
                     ) { onTutorSearchTutorChanged("") }
                 }
-                // DESIGN-PLACEHOLDER format/mode chips
-                Chip(text = "Online", leadingIcon = SoftIcons.globe) // DESIGN-PLACEHOLDER
-                Chip(text = "Top rated", leadingIcon = SoftIcons.star) // DESIGN-PLACEHOLDER
+
+                // Online / In-person format toggle
+                Chip(
+                    text = "Online",
+                    selected = filters.format == "ONLINE",
+                    leadingIcon = SoftIcons.globe
+                ) {
+                    onTutorSearchFormatChanged(if (filters.format == "ONLINE") null else "ONLINE")
+                }
+                Chip(
+                    text = "In person",
+                    selected = filters.format == "IN_PERSON",
+                    leadingIcon = SoftIcons.pin
+                ) {
+                    onTutorSearchFormatChanged(if (filters.format == "IN_PERSON") null else "IN_PERSON")
+                }
+
+                // 4-star minimum rating chip
+                Chip(
+                    text = "4+ stars",
+                    selected = filters.minRating == 4,
+                    leadingIcon = SoftIcons.star
+                ) {
+                    onTutorSearchMinRatingChanged(if (filters.minRating == 4) null else 4)
+                }
+
+                // Available today chip
+                Chip(
+                    text = "Today",
+                    selected = filters.availableToday,
+                    leadingIcon = SoftIcons.calendar
+                ) {
+                    onTutorSearchAvailableTodayChanged(!filters.availableToday)
+                }
+
+                // Sort toggle: Top rated / Soonest
+                Chip(
+                    text = if (filters.sort == "TOP_RATED") "Top rated" else "Soonest",
+                    selected = true,
+                    leadingIcon = SoftIcons.sliders
+                ) {
+                    onTutorSearchSortChanged(if (filters.sort == "TOP_RATED") "SOONEST" else "TOP_RATED")
+                }
             }
         }
 
@@ -587,6 +681,7 @@ private fun ScreenFindResults(
                     val firstSlot = slots.first()
                     val subjects = slots.map { it.subject }.distinct().take(3)
                     val nextSlot = slots.minByOrNull { it.dateLabel + it.startHour }
+                    val tutorSummary = tutorMap[tutorId]
 
                     SoftCard(
                         modifier = Modifier
@@ -596,7 +691,7 @@ private fun ScreenFindResults(
                                 indication = null
                             ) { onOpenProfile(tutorId, firstSlot.tutorDisplayName) }
                     ) {
-                        // Header row: avatar + name + rate placeholder
+                        // Header row: avatar + name + badges
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.Top,
@@ -606,22 +701,17 @@ private fun ScreenFindResults(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = firstSlot.tutorDisplayName,
-                                        style = SoftType.title.copy(fontSize = 15.sp)
+                                        style = SoftType.title.copy(fontSize = 15.sp),
+                                        modifier = Modifier.weight(1f)
                                     )
-                                    // DESIGN-PLACEHOLDER: rate not in TutorAvailabilityUi
-                                    Text(
-                                        text = "— zł",
-                                        style = TextStyle(
-                                            fontFamily = BodyFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
-                                            color = Primary600
-                                        )
-                                    )
+                                    if (tutorSummary?.verified == true) {
+                                        Badge(text = "Verified", tone = BadgeTone.Prim)
+                                    }
                                 }
                                 Spacer(Modifier.height(2.dp))
                                 Text(
@@ -633,11 +723,26 @@ private fun ScreenFindResults(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    StarsRow(value = 5f) // DESIGN-PLACEHOLDER: no rating in model
-                                    Text(
-                                        text = "5.0",
-                                        style = SoftType.meta.copy(fontSize = 12.sp)
-                                    )
+                                    val rating = tutorSummary?.ratingAvg?.toFloat() ?: 0f
+                                    val count = tutorSummary?.ratingCount ?: 0
+                                    if (count > 0) {
+                                        StarsRow(value = rating)
+                                        Text(
+                                            text = "${"%.1f".format(rating)} ($count)",
+                                            style = SoftType.meta.copy(fontSize = 12.sp)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "No reviews yet",
+                                            style = SoftType.meta.copy(fontSize = 12.sp)
+                                        )
+                                    }
+                                    if (tutorSummary?.experienceYears != null) {
+                                        Text(
+                                            text = "· ${tutorSummary.experienceYears} yrs",
+                                            style = SoftType.meta.copy(fontSize = 12.sp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -695,7 +800,14 @@ private fun ScreenTutorProfile(
     val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId) {
         state.dashboardState.availableTutorSlots.filter { it.tutorId == tutorId }
     }
-    val subjects = tutorSlots.map { it.subject }.distinct()
+    val tutorSummary: TutorSummaryUi? = remember(state.dashboardState.tutors, tutorId) {
+        state.dashboardState.tutors.firstOrNull { it.uid == tutorId }
+    }
+    val subjects = if (tutorSummary?.subjectsList?.isNotEmpty() == true)
+        tutorSummary.subjectsList
+    else
+        tutorSlots.map { it.subject }.distinct()
+
     val reviews = remember(state.dashboardState.reviewsForMe, tutorId) {
         state.dashboardState.reviewsForMe.filter { it.tutorId == tutorId }.take(3)
     }
@@ -704,7 +816,6 @@ private fun ScreenTutorProfile(
     val today = LocalDate.now()
     val isoFmt = DateTimeFormatter.ISO_LOCAL_DATE
     val dowFmt = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
-    val availableDates = tutorSlots.map { it.dateLabel }.toSet()
     val dayCells = (0..5).map { offset ->
         val date = today.plusDays(offset.toLong())
         val label = date.format(isoFmt)
@@ -754,7 +865,14 @@ private fun ScreenTutorProfile(
                     Column(modifier = Modifier.weight(1f).padding(top = 4.dp)) {
                         Text(text = tutorName, style = SoftType.h1)
                         Spacer(Modifier.height(2.dp))
-                        Text(text = "PWr tutor", style = SoftType.meta)
+                        if (tutorSummary?.experienceYears != null) {
+                            Text(
+                                text = "${tutorSummary.experienceYears} yrs experience",
+                                style = SoftType.meta
+                            )
+                        } else {
+                            Text(text = "PWr tutor", style = SoftType.meta)
+                        }
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (tutorSlots.isNotEmpty()) {
@@ -778,41 +896,19 @@ private fun ScreenTutorProfile(
                                     )
                                 }
                             }
-                            Badge(text = "Verified PWr", tone = BadgeTone.Prim)
+                            if (tutorSummary?.verified == true) {
+                                Badge(text = "Verified PWr", tone = BadgeTone.Prim)
+                            }
                         }
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
 
-                // Stat strip
+                // Stat strip — real ratingAvg + ratingCount
                 CardQ {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        // DESIGN-PLACEHOLDER: rating not in model — show slot count instead
-                        listOf(
-                            Triple("${tutorSlots.size}", "Slots", null as Nothing?),
-                            Triple("5.0", "Rating", null), // DESIGN-PLACEHOLDER
-                            Triple("PWr", "Verified", null) // DESIGN-PLACEHOLDER
-                        ).forEachIndexed { idx, (value, label, _) ->
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                if (idx > 0) {
-                                    Row(
-                                        modifier = Modifier
-                                            .height(40.dp)
-                                            .width(1.dp)
-                                            .background(Line),
-                                        content = {}
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    val ratingAvg = tutorSummary?.ratingAvg ?: 0.0
+                    val ratingCount = tutorSummary?.ratingCount ?: 0
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -821,9 +917,18 @@ private fun ScreenTutorProfile(
                     ) {
                         listOf(
                             "${tutorSlots.size}" to "Slots",
-                            "5.0" to "Rating", // DESIGN-PLACEHOLDER
-                            "PWr" to "Verified" // DESIGN-PLACEHOLDER
+                            if (ratingCount > 0) "${"%.1f".format(ratingAvg)}" to "Rating ($ratingCount)"
+                            else "—" to "Rating",
+                            if (tutorSummary?.verified == true) "PWr" to "Verified" else "—" to "Verified"
                         ).forEachIndexed { idx, (value, label) ->
+                            if (idx > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(40.dp)
+                                        .background(Line)
+                                )
+                            }
                             Column(
                                 modifier = Modifier.weight(1f),
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -838,15 +943,18 @@ private fun ScreenTutorProfile(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Bio — DESIGN-PLACEHOLDER (no bio field in model)
+                // Bio — real bio if available, fallback text
                 Text(
-                    text = "Open slots available for PWr students. Book a session to get started.",
+                    text = if (tutorSummary?.bio?.isNotBlank() == true)
+                        tutorSummary.bio
+                    else
+                        "Open slots available for PWr students. Book a session to get started.",
                     style = SoftType.body
                 )
 
                 Spacer(Modifier.height(14.dp))
 
-                // Subject chips
+                // Subject chips — real subjectsList from TutorSummaryUi
                 if (subjects.isNotEmpty()) {
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -932,7 +1040,7 @@ private fun ScreenTutorProfile(
             Spacer(Modifier.height(16.dp))
         }
 
-        // Sticky footer CTA
+        // Sticky footer CTA — no price, just the button
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -941,23 +1049,12 @@ private fun ScreenTutorProfile(
                 .border(1.dp, Line, RoundedCornerShape(0.dp))
                 .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
-            Row(
+            SoftButton(
+                text = "Book a session",
+                onClick = onBook,
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column {
-                    Text(text = "Starting at", style = SoftType.meta.copy(fontSize = 11.5.sp))
-                    // DESIGN-PLACEHOLDER: rate not in model
-                    Text(text = "— zł/h", style = SoftType.h2)
-                }
-                SoftButton(
-                    text = "Book a session",
-                    onClick = onBook,
-                    modifier = Modifier.weight(1f),
-                    trailingIcon = SoftIcons.arrow
-                )
-            }
+                trailingIcon = SoftIcons.arrow
+            )
         }
     }
 }
@@ -970,6 +1067,9 @@ private fun ScreenBooking(
     tutorId: String,
     tutorName: String,
     onBack: () -> Unit,
+    onStartBookingRequest: (String) -> Unit,
+    onBookingRequestMessageChanged: (String) -> Unit,
+    onBookingRequestTopicChanged: (String) -> Unit,
     onConfirm: (String, TutorAvailabilityUi) -> Unit
 ) {
     val tutorSlots = remember(state.dashboardState.availableTutorSlots, tutorId) {
@@ -1001,6 +1101,11 @@ private fun ScreenBooking(
 
     val selectedSlot = slotsForDay.find { it.id == selectedSlotId }
         ?: slotsForDay.firstOrNull()
+
+    // When a slot is selected, call startBookingRequest to prime the request state
+    val activeSlot = slotsForDay.find { it.id == selectedSlotId } ?: selectedSlot
+
+    val bookingRequest = state.bookingRequest
 
     Box(modifier = Modifier.fillMaxSize().background(Bg)) {
         Column(
@@ -1041,9 +1146,8 @@ private fun ScreenBooking(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(tutorName, style = SoftType.title.copy(fontSize = 14.sp))
                             val firstSubj = tutorSlots.firstOrNull()?.subject ?: ""
-                            // DESIGN-PLACEHOLDER: rate not in model
                             Text(
-                                text = "$firstSubj · — zł/h",
+                                text = firstSubj,
                                 style = SoftType.meta.copy(fontSize = 12.sp)
                             )
                         }
@@ -1052,7 +1156,7 @@ private fun ScreenBooking(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             StatusDot()
-                            Badge(text = "Free", tone = BadgeTone.Green)
+                            Badge(text = "Open", tone = BadgeTone.Green)
                         }
                     }
                 }
@@ -1120,7 +1224,10 @@ private fun ScreenBooking(
                                         label = slot.startHour,
                                         state = chipState,
                                         modifier = Modifier.weight(1f),
-                                        onClick = { selectedSlotId = slot.id }
+                                        onClick = {
+                                            selectedSlotId = slot.id
+                                            onStartBookingRequest(slot.id)
+                                        }
                                     )
                                 }
                                 // Fill empty cells
@@ -1159,7 +1266,10 @@ private fun ScreenBooking(
                                         label = slot.startHour,
                                         state = chipState,
                                         modifier = Modifier.weight(1f),
-                                        onClick = { selectedSlotId = slot.id }
+                                        onClick = {
+                                            selectedSlotId = slot.id
+                                            onStartBookingRequest(slot.id)
+                                        }
                                     )
                                 }
                                 repeat(3 - rowSlots.size) {
@@ -1171,31 +1281,81 @@ private fun ScreenBooking(
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
-
-                // Duration chips — DESIGN-PLACEHOLDER: no duration field in model
-                Text("Duration", style = SoftType.h3)
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Chip(text = "1 h") // DESIGN-PLACEHOLDER
-                    Chip(text = "1.5 h", selected = true) // DESIGN-PLACEHOLDER
-                    Chip(text = "2 h") // DESIGN-PLACEHOLDER
+                // Show slot details (format + duration) when a slot is selected
+                if (activeSlot != null) {
+                    Spacer(Modifier.height(20.dp))
+                    Text("Session details", style = SoftType.h3)
+                    Spacer(Modifier.height(10.dp))
+                    CardQ {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Format", style = SoftType.meta.copy(fontSize = 11.5.sp))
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = if (activeSlot.format == "ONLINE") "Online" else "In person",
+                                    style = SoftType.title.copy(fontSize = 14.sp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Duration", style = SoftType.meta.copy(fontSize = 11.5.sp))
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "${activeSlot.durationMinutes} min",
+                                    style = SoftType.title.copy(fontSize = 14.sp)
+                                )
+                            }
+                        }
+                        if (activeSlot.format == "IN_PERSON" && activeSlot.location.isNotBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("Location", style = SoftType.meta.copy(fontSize = 11.5.sp))
+                            Spacer(Modifier.height(2.dp))
+                            Text(activeSlot.location, style = SoftType.bodySm)
+                        }
+                        if (activeSlot.format == "ONLINE" && activeSlot.meetingUrl.isNotBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("Meeting link", style = SoftType.meta.copy(fontSize = 11.5.sp))
+                            Spacer(Modifier.height(2.dp))
+                            Text(activeSlot.meetingUrl, style = SoftType.bodySm)
+                        }
+                        if (activeSlot.topic.isNotBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("Suggested topic", style = SoftType.meta.copy(fontSize = 11.5.sp))
+                            Spacer(Modifier.height(2.dp))
+                            Text(activeSlot.topic, style = SoftType.bodySm)
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
 
-                // Format chips — DESIGN-PLACEHOLDER: no format field in model
-                Text("Format", style = SoftType.h3)
+                // Topic note field — wired to bookingRequest.topic
+                Text("What would you like to work on?", style = SoftType.h3)
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Chip(text = "Online", selected = true, leadingIcon = SoftIcons.globe) // DESIGN-PLACEHOLDER
-                    Chip(text = "In person", leadingIcon = SoftIcons.pin) // DESIGN-PLACEHOLDER
-                }
+                SoftTextField(
+                    value = bookingRequest.topic,
+                    onValueChange = onBookingRequestTopicChanged,
+                    label = "Topic / goal",
+                    placeholder = "e.g. Integration by parts, exam prep...",
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Optional message to tutor
+                SoftTextField(
+                    value = bookingRequest.message,
+                    onValueChange = onBookingRequestMessageChanged,
+                    label = "Message to tutor (optional)",
+                    placeholder = "Say hi or share context...",
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
-        // Sticky footer
-        val activeSlot = slotsForDay.find { it.id == selectedSlotId } ?: selectedSlot
+        // Sticky footer — no price, just the CTA
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -1204,27 +1364,17 @@ private fun ScreenBooking(
                 .border(1.dp, Line, RoundedCornerShape(0.dp))
                 .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
-            Row(
+            SoftButton(
+                text = "Review & book",
+                onClick = {
+                    activeSlot?.let { slot ->
+                        onConfirm(slot.id, slot)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column {
-                    Text("Total · 1h", style = SoftType.meta.copy(fontSize = 11.5.sp)) // DESIGN-PLACEHOLDER
-                    Text("— zł", style = SoftType.h2) // DESIGN-PLACEHOLDER: no rate in model
-                }
-                SoftButton(
-                    text = "Review & book",
-                    onClick = {
-                        activeSlot?.let { slot ->
-                            onConfirm(slot.id, slot)
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = activeSlot != null,
-                    trailingIcon = SoftIcons.arrow
-                )
-            }
+                enabled = activeSlot != null,
+                trailingIcon = SoftIcons.arrow
+            )
         }
     }
 }
@@ -1233,12 +1383,36 @@ private fun ScreenBooking(
 
 @Composable
 private fun ScreenBookingConfirm(
+    state: SmartCampusUiState,
     slot: TutorAvailabilityUi,
     onClose: () -> Unit
 ) {
+    val context = LocalContext.current
+    val bookingRequest = state.bookingRequest
+
+    // Parse begin/end millis for calendar intent
+    val calendarBeginMillis: Long? = remember(slot.dateLabel, slot.startHour) {
+        try {
+            val dtStr = "${slot.dateLabel}T${slot.startHour}:00"
+            LocalDateTime.parse(dtStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        } catch (_: Exception) { null }
+    }
+    val calendarEndMillis: Long? = remember(slot.dateLabel, slot.endHour) {
+        try {
+            val dtStr = "${slot.dateLabel}T${slot.endHour}:00"
+            LocalDateTime.parse(dtStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        } catch (_: Exception) { null }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Bg)) {
         SoftTopBar(
-            title = "Booked",
+            title = "Request sent",
             leading = { SoftIconButton(icon = SoftIcons.x, onClick = onClose) }
         )
 
@@ -1253,28 +1427,28 @@ private fun ScreenBookingConfirm(
         ) {
             Spacer(Modifier.height(12.dp))
 
-            // Success check circle
+            // Pending/sent check circle
             Box(
                 modifier = Modifier
                     .size(76.dp)
                     .clip(CircleShape)
-                    .background(GreenBg),
+                    .background(Primary50),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = SoftIcons.check,
                     contentDescription = null,
-                    tint = Green,
+                    tint = Primary600,
                     modifier = Modifier.size(38.dp)
                 )
             }
 
             Spacer(Modifier.height(16.dp))
 
-            Text("You're all set!", style = SoftType.display)
+            Text("Request sent!", style = SoftType.display)
             Spacer(Modifier.height(8.dp))
             Text(
-                "See you on ${slot.dateLabel}. A receipt is in your inbox.",
+                "Waiting for the tutor to confirm. You'll be notified when they accept.",
                 style = SoftType.body
             )
 
@@ -1298,19 +1472,20 @@ private fun ScreenBookingConfirm(
                             Text(slot.tutorDisplayName, style = SoftType.meta.copy(fontSize = 12.sp))
                         }
                     }
-                    Badge(text = "Confirmed", tone = BadgeTone.Prim)
+                    Badge(text = "Pending", tone = BadgeTone.Prim)
                 }
 
                 Spacer(Modifier.height(16.dp))
                 SoftDivider()
                 Spacer(Modifier.height(16.dp))
 
-                // Ticket grid: Date / Time / Format / Total
+                // Ticket grid: Date / Time / Format / Duration
+                val formatLabel = if (slot.format == "ONLINE") "Online" else "In person"
                 val ticketRows = listOf(
                     "Date" to slot.dateLabel,
                     "Time" to slot.timeLabel,
-                    "Format" to "Online", // DESIGN-PLACEHOLDER: no format in model
-                    "Total" to "Confirmed" // DESIGN-PLACEHOLDER: no price in model
+                    "Format" to formatLabel,
+                    "Duration" to "${slot.durationMinutes} min"
                 )
                 // 2×2 grid rendered as two rows
                 ticketRows.chunked(2).forEach { pair ->
@@ -1325,31 +1500,64 @@ private fun ScreenBookingConfirm(
                     }
                     Spacer(Modifier.height(16.dp))
                 }
+
+                // Meeting URL if present
+                if (slot.format == "ONLINE" && slot.meetingUrl.isNotBlank()) {
+                    Text("Meeting link", style = SoftType.meta.copy(fontSize = 11.5.sp))
+                    Spacer(Modifier.height(2.dp))
+                    Text(slot.meetingUrl, style = SoftType.bodySm)
+                    Spacer(Modifier.height(16.dp))
+                }
+                if (slot.format == "IN_PERSON" && slot.location.isNotBlank()) {
+                    Text("Location", style = SoftType.meta.copy(fontSize = 11.5.sp))
+                    Spacer(Modifier.height(2.dp))
+                    Text(slot.location, style = SoftType.bodySm)
+                    Spacer(Modifier.height(16.dp))
+                }
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            // Notes card
-            CardFlat {
-                Text(
-                    "I want to work on",
-                    style = SoftType.eyebrow.copy(color = Ink3)
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "— // DESIGN-PLACEHOLDER: no notes field in booking model",
-                    style = SoftType.bodySm
-                )
+            // Topic note card if topic was entered
+            if (bookingRequest.topic.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                CardFlat {
+                    Text(
+                        "Topic / goal",
+                        style = SoftType.eyebrow.copy(color = Ink3)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        bookingRequest.topic,
+                        style = SoftType.bodySm
+                    )
+                }
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Add to calendar — DESIGN-PLACEHOLDER
+            // Add to calendar — disabled if parsing failed
             SoftButton(
                 text = "Add to calendar",
-                onClick = {}, // DESIGN-PLACEHOLDER
+                onClick = {
+                    if (calendarBeginMillis != null && calendarEndMillis != null) {
+                        val locationStr = when {
+                            slot.format == "IN_PERSON" && slot.location.isNotBlank() -> slot.location
+                            slot.format == "ONLINE" && slot.meetingUrl.isNotBlank() -> slot.meetingUrl
+                            else -> ""
+                        }
+                        val intent = buildAddToCalendarIntent(
+                            title = "Tutoring: ${slot.subject} with ${slot.tutorDisplayName}",
+                            beginMillis = calendarBeginMillis,
+                            endMillis = calendarEndMillis,
+                            location = locationStr,
+                            description = if (bookingRequest.topic.isNotBlank())
+                                "Topic: ${bookingRequest.topic}" else ""
+                        )
+                        context.startActivity(intent)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 variant = SoftButtonVariant.Primary,
+                enabled = calendarBeginMillis != null && calendarEndMillis != null,
                 trailingIcon = SoftIcons.arrow
             )
 
@@ -1397,6 +1605,11 @@ private fun TutorScheduleScreen(
     onAvailabilityDateChanged: (String) -> Unit,
     onAvailabilityStartHourChanged: (String) -> Unit,
     onAvailabilityEndHourChanged: (String) -> Unit,
+    onAvailabilityDurationChanged: (Int) -> Unit,
+    onAvailabilityFormatChanged: (String) -> Unit,
+    onAvailabilityLocationChanged: (String) -> Unit,
+    onAvailabilityMeetingUrlChanged: (String) -> Unit,
+    onAvailabilityTopicChanged: (String) -> Unit,
     onAddAvailability: () -> Unit,
     onDeleteAvailability: (String) -> Unit,
     onCancelBooking: (String, String, String) -> Unit
@@ -1479,6 +1692,8 @@ private fun TutorScheduleScreen(
     val slotsForDay = state.dashboardState.myAvailability.filter { it.dateLabel == selectedDateLabel }
     val bookedForDay = slotsForDay.filter { it.isBooked }
     val openForDay = slotsForDay.filter { !it.isBooked }
+
+    val form = state.availabilityForm
 
     Column(modifier = Modifier.fillMaxSize().background(Bg)) {
         SoftTopBar(
@@ -1611,7 +1826,7 @@ private fun TutorScheduleScreen(
                         }
                     }
                 } else {
-                    // Open slot — CardFlat with edit icon
+                    // Open slot — CardFlat with delete icon
                     CardFlat(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1638,7 +1853,7 @@ private fun TutorScheduleScreen(
                                     )
                                 )
                             }
-                            // Delete/edit icon
+                            // Delete icon
                             SoftIconButton(
                                 icon = SoftIcons.x,
                                 onClick = { onDeleteAvailability(slot.id) }
@@ -1663,30 +1878,17 @@ private fun TutorScheduleScreen(
                         }
                         Spacer(Modifier.height(12.dp))
 
-                        // 2-column grid: Subject / Rate  |  Date / Time
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                SoftTextField(
-                                    value = state.availabilityForm.subject,
-                                    onValueChange = onAvailabilitySubjectChanged,
-                                    label = "Subject",
-                                    placeholder = "e.g. Calculus II"
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                // Rate — DESIGN-PLACEHOLDER: no rate field in AvailabilityFormState
-                                SoftTextField(
-                                    value = "", // DESIGN-PLACEHOLDER
-                                    onValueChange = {}, // DESIGN-PLACEHOLDER
-                                    label = "Rate",
-                                    placeholder = "e.g. 45 zł/h" // DESIGN-PLACEHOLDER
-                                )
-                            }
-                        }
+                        // Subject field
+                        SoftTextField(
+                            value = form.subject,
+                            onValueChange = onAvailabilitySubjectChanged,
+                            label = "Subject",
+                            placeholder = "e.g. Calculus II",
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         Spacer(Modifier.height(10.dp))
+
+                        // Date + Time row
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1698,7 +1900,7 @@ private fun TutorScheduleScreen(
                                         .clickable { showDatePicker = true }
                                 ) {
                                     SoftTextField(
-                                        value = state.availabilityForm.date,
+                                        value = form.date,
                                         onValueChange = {},
                                         label = "Date",
                                         placeholder = "Tap to pick"
@@ -1717,7 +1919,7 @@ private fun TutorScheduleScreen(
                                             .clickable { showStartTimePicker = true }
                                     ) {
                                         SoftTextField(
-                                            value = state.availabilityForm.startHour,
+                                            value = form.startHour,
                                             onValueChange = {},
                                             label = "From",
                                             placeholder = "12:00"
@@ -1729,7 +1931,7 @@ private fun TutorScheduleScreen(
                                             .clickable { showEndTimePicker = true }
                                     ) {
                                         SoftTextField(
-                                            value = state.availabilityForm.endHour,
+                                            value = form.endHour,
                                             onValueChange = {},
                                             label = "To",
                                             placeholder = "13:00"
@@ -1738,6 +1940,73 @@ private fun TutorScheduleScreen(
                                 }
                             }
                         }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // Duration chips: 60 / 90 / 120 min
+                        Text("Duration", style = SoftType.title.copy(fontSize = 13.sp))
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(60, 90, 120).forEach { mins ->
+                                Chip(
+                                    text = "${mins / 60}${if (mins % 60 != 0) ".5" else ""} h",
+                                    selected = form.durationMinutes == mins,
+                                    onClick = { onAvailabilityDurationChanged(mins) }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // Format chips: Online / In-person
+                        Text("Format", style = SoftType.title.copy(fontSize = 13.sp))
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Chip(
+                                text = "Online",
+                                selected = form.format == "ONLINE",
+                                leadingIcon = SoftIcons.globe,
+                                onClick = { onAvailabilityFormatChanged("ONLINE") }
+                            )
+                            Chip(
+                                text = "In person",
+                                selected = form.format == "IN_PERSON",
+                                leadingIcon = SoftIcons.pin,
+                                onClick = { onAvailabilityFormatChanged("IN_PERSON") }
+                            )
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Conditional location / meeting URL field
+                        if (form.format == "IN_PERSON") {
+                            SoftTextField(
+                                value = form.location,
+                                onValueChange = onAvailabilityLocationChanged,
+                                label = "Location",
+                                placeholder = "e.g. C-13 room 2.15",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        } else {
+                            SoftTextField(
+                                value = form.meetingUrl,
+                                onValueChange = onAvailabilityMeetingUrlChanged,
+                                label = "Meeting link",
+                                placeholder = "https://meet.google.com/...",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+
+                        // Topic field
+                        SoftTextField(
+                            value = form.topic,
+                            onValueChange = onAvailabilityTopicChanged,
+                            label = "Topic hint (optional)",
+                            placeholder = "e.g. Integrals, sorting algorithms...",
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
                         Spacer(Modifier.height(16.dp))
 
@@ -1749,10 +2018,10 @@ private fun TutorScheduleScreen(
                                 showNewSlotForm = false
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = state.availabilityForm.subject.isNotBlank()
-                                && state.availabilityForm.date.isNotBlank()
-                                && state.availabilityForm.startHour.isNotBlank()
-                                && state.availabilityForm.endHour.isNotBlank(),
+                            enabled = form.subject.isNotBlank()
+                                && form.date.isNotBlank()
+                                && form.startHour.isNotBlank()
+                                && form.endHour.isNotBlank(),
                             trailingIcon = SoftIcons.arrow
                         )
                     }
