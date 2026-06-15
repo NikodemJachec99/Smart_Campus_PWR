@@ -214,19 +214,7 @@ fun ProfileTab(
                         icon = SoftIcons.star,
                         onClick = { onNavigate(DashboardRoutes.REVIEWS) }
                     ))
-                    add(ProfileMenuItem(
-                        title = "Earnings",
-                        subtitle = null,
-                        icon = SoftIcons.wallet,
-                        onClick = { onNavigate(DashboardRoutes.EARNINGS) }
-                    ))
                 }
-                add(ProfileMenuItem(
-                    title = "Payment methods",
-                    subtitle = null, // DESIGN-PLACEHOLDER
-                    icon = SoftIcons.wallet,
-                    onClick = { /* DESIGN-PLACEHOLDER */ }
-                ))
                 add(ProfileMenuItem(
                     title = "Notifications",
                     subtitle = null, // DESIGN-PLACEHOLDER

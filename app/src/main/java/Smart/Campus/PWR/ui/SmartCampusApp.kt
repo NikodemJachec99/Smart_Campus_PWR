@@ -7,7 +7,6 @@ import Smart.Campus.PWR.ui.components.softindigo.Badge
 import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
 import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
 import Smart.Campus.PWR.ui.components.softindigo.SoftButton
-import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
 import Smart.Campus.PWR.ui.components.softindigo.SoftIconButton
 import Smart.Campus.PWR.ui.components.softindigo.SoftTextField
 import Smart.Campus.PWR.ui.components.softindigo.cardShadow
@@ -722,49 +721,6 @@ private fun LoginScreen(
                 )
 
                 Spacer(Modifier.height(20.dp))
-
-                // ── "or" divider ──────────────────────────────────────────────
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(modifier = Modifier.weight(1f).height(1.dp).background(Line))
-                    Text("or", style = SoftType.meta)
-                    Box(modifier = Modifier.weight(1f).height(1.dp).background(Line))
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                // ── SSO button — DESIGN-PLACEHOLDER: PWr SSO ─────────────────
-                SoftButton(
-                    text = "Continue with PWr SSO",
-                    onClick = { /* DESIGN-PLACEHOLDER: PWr SSO */ },
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = SoftButtonVariant.Outline,
-                    enabled = !state.isBusy
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                // ── "Not on PWr?" footer link ─────────────────────────────────
-                Text(
-                    buildAnnotatedString {
-                        append("Not on PWr? ")
-                        withStyle(SpanStyle(color = Primary600, fontWeight = FontWeight.Bold)) {
-                            append("Request access")
-                        }
-                    },
-                    style = SoftType.meta,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { /* DESIGN-PLACEHOLDER: request access */ }
-                )
             }
         }
     }

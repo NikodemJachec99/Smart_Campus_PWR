@@ -21,7 +21,6 @@ object DashboardRoutes {
     const val CONVERSATION = "conversation"
     const val NOTIFICATIONS = "notifications"
     const val LESSONS = "lessons"
-    const val EARNINGS = "earnings"
 }
 
 data class TutorAvailabilityUi(
