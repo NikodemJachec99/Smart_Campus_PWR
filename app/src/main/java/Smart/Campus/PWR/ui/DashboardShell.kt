@@ -275,7 +275,10 @@ fun MainShellScreen(
                                     activeRole = activeRole,
                                     onNavigate = { navController.navigateToRoute(it) },
                                     onCancelBooking = onCancelBooking,
-                                    onClearMessages = onClearMessages
+                                    onClearMessages = onClearMessages,
+                                    onStartReschedule = viewModel::startReschedule,
+                                    onReschedule = viewModel::rescheduleBooking,
+                                    onClearReschedule = viewModel::clearReschedule
                                 )
                             }
                             composable(DashboardRoutes.ASSIGNMENTS) {

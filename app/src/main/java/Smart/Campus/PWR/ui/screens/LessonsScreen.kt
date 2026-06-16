@@ -19,6 +19,7 @@ import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.ui.state.DashboardRoutes
 import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
+import Smart.Campus.PWR.ui.state.TutorAvailabilityUi
 import Smart.Campus.PWR.ui.theme.Amber
 import Smart.Campus.PWR.ui.theme.Bg
 import Smart.Campus.PWR.ui.theme.Bg2
@@ -35,6 +36,8 @@ import Smart.Campus.PWR.ui.theme.Red
 import Smart.Campus.PWR.ui.theme.RedBg
 import Smart.Campus.PWR.ui.theme.SoftType
 import Smart.Campus.PWR.ui.theme.White
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -65,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,7 +81,7 @@ import java.time.temporal.WeekFields
 import java.util.Locale
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Public entry point — keep exact signature unchanged (Task 14)
+// Public entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -86,7 +90,10 @@ fun LessonsTab(
     activeRole: UserRole,
     onNavigate: (String) -> Unit,
     onCancelBooking: (String, String, String) -> Unit,
-    onClearMessages: () -> Unit
+    onClearMessages: () -> Unit,
+    onStartReschedule: (String) -> Unit = {},
+    onReschedule: (String, String) -> Unit = { _, _ -> },
+    onClearReschedule: () -> Unit = {}
 ) {
     val bookings = state.dashboardState.myStudentBookings
     val reviewedIds = state.dashboardState.reviewsByMe
@@ -94,8 +101,11 @@ fun LessonsTab(
         .toSet()
 
     val now = LocalDateTime.now()
+
+    // Status-aware partition: upcoming = PENDING or CONFIRMED (and not past-dated);
+    // past = COMPLETED / NO_SHOW / CANCELLED / DECLINED or past-dated PENDING/CONFIRMED.
     val upcoming = bookings.filter { it.isUpcoming(now) }
-    val past = bookings.filter { !it.isUpcoming(now) }
+    val past     = bookings.filter { !it.isUpcoming(now) }
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
@@ -104,9 +114,12 @@ fun LessonsTab(
         "Past · ${past.size}"
     )
 
-    // Most recent past lesson that has NOT yet been reviewed
+    // Most recent past lesson that has NOT yet been reviewed (exclude fully cancelled/declined)
     val ratePromptLesson = past
-        .filter { it.status != "cancelled" && it.id !in reviewedIds }
+        .filter { b ->
+            val s = b.status.uppercase()
+            s == "COMPLETED" && b.id !in reviewedIds
+        }
         .firstOrNull()
 
     Column(
@@ -151,8 +164,13 @@ fun LessonsTab(
                 UpcomingContent(
                     upcoming = upcoming,
                     ratePromptLesson = ratePromptLesson,
+                    rescheduleTargetBookingId = state.rescheduleTargetBookingId,
+                    availableTutorSlots = state.dashboardState.availableTutorSlots,
                     onNavigate = onNavigate,
                     onCancelBooking = onCancelBooking,
+                    onStartReschedule = onStartReschedule,
+                    onReschedule = onReschedule,
+                    onClearReschedule = onClearReschedule,
                     now = now
                 )
             } else {
@@ -174,8 +192,13 @@ fun LessonsTab(
 private fun UpcomingContent(
     upcoming: List<LessonBookingUi>,
     ratePromptLesson: LessonBookingUi?,
+    rescheduleTargetBookingId: String?,
+    availableTutorSlots: List<TutorAvailabilityUi>,
     onNavigate: (String) -> Unit,
     onCancelBooking: (String, String, String) -> Unit,
+    onStartReschedule: (String) -> Unit,
+    onReschedule: (String, String) -> Unit,
+    onClearReschedule: () -> Unit,
     now: LocalDateTime
 ) {
     // Rate prompt banner
@@ -218,8 +241,15 @@ private fun UpcomingContent(
                     UpcomingLessonCard(
                         lesson = lesson,
                         isSoon = lesson.isSoon(now),
+                        isRescheduleTarget = rescheduleTargetBookingId == lesson.id,
+                        openSlotsForTutor = availableTutorSlots.filter {
+                            it.tutorId == lesson.tutorId && !it.isBooked
+                        },
                         onCancelBooking = onCancelBooking,
-                        onNavigate = onNavigate
+                        onNavigate = onNavigate,
+                        onStartReschedule = onStartReschedule,
+                        onReschedule = onReschedule,
+                        onClearReschedule = onClearReschedule
                     )
                 }
             }
@@ -338,10 +368,19 @@ private fun RatePromptCard(lesson: LessonBookingUi, onClick: () -> Unit) {
 private fun UpcomingLessonCard(
     lesson: LessonBookingUi,
     isSoon: Boolean,
+    isRescheduleTarget: Boolean,
+    openSlotsForTutor: List<TutorAvailabilityUi>,
     onCancelBooking: (String, String, String) -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    onStartReschedule: (String) -> Unit,
+    onReschedule: (String, String) -> Unit,
+    onClearReschedule: () -> Unit
 ) {
+    val context = LocalContext.current
     val (dayOfWeek, dayNum) = lesson.parseDayParts()
+    val statusNorm = lesson.status.uppercase()
+    val isConfirmed = statusNorm == "CONFIRMED"
+    val hasMeetingUrl = lesson.meetingUrl.isNotBlank()
 
     SoftCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -399,14 +438,9 @@ private fun UpcomingLessonCard(
                         ),
                         modifier = Modifier.weight(1f)
                     )
-                    if (isSoon) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Badge(
-                            text = "Soon",
-                            tone = BadgeTone.Amber,
-                            leadingIcon = null
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    // Status badge
+                    StatusBadgeForUpcoming(statusNorm = statusNorm, isSoon = isSoon)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -435,6 +469,16 @@ private fun UpcomingLessonCard(
                         color = Ink3
                     )
                 )
+
+                // Format / location / topic meta row
+                if (lesson.topic.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = lesson.topic,
+                        style = SoftType.meta,
+                        maxLines = 1
+                    )
+                }
             }
         }
 
@@ -445,34 +489,160 @@ private fun UpcomingLessonCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // DESIGN-PLACEHOLDER: No real reschedule flow exists yet.
-            // Button is Outline/Sm. onClick triggers onCancelBooking ONLY when the user
-            // taps — it does NOT cancel on render. The reason string marks it as a reschedule
-            // request so the admin/tutor can act on it; it is not an auto-cancel.
             SoftButton(
                 text = "Reschedule",
-                onClick = {
-                    onCancelBooking(
-                        lesson.id,
-                        lesson.availabilityId,
-                        "Reschedule requested"
-                    )
-                },
+                onClick = { onStartReschedule(lesson.id) },
                 variant = SoftButtonVariant.Outline,
                 size = SoftButtonSize.Sm,
                 modifier = Modifier.weight(1f)
             )
 
-            // DESIGN-PLACEHOLDER: "Join" deep-links to chat; "Details" also goes to chat
-            // until a dedicated lesson-detail screen exists.
-            SoftButton(
-                text = if (isSoon) "Join" else "Details",
-                onClick = { onNavigate(DashboardRoutes.CHAT) },
-                variant = SoftButtonVariant.Primary,
-                size = SoftButtonSize.Sm,
-                modifier = Modifier.weight(1f)
+            if (isConfirmed && hasMeetingUrl) {
+                // Join — opens the meeting URL in external browser/app
+                SoftButton(
+                    text = "Join",
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(lesson.meetingUrl))
+                        context.startActivity(intent)
+                    },
+                    variant = SoftButtonVariant.Primary,
+                    size = SoftButtonSize.Sm,
+                    modifier = Modifier.weight(1f)
+                )
+            } else if (isConfirmed) {
+                // Confirmed but no URL: show disabled-style Details button
+                SoftButton(
+                    text = "Details",
+                    onClick = { onNavigate(DashboardRoutes.CHAT) },
+                    variant = SoftButtonVariant.Primary,
+                    size = SoftButtonSize.Sm,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                // PENDING: Details goes to chat
+                SoftButton(
+                    text = "Details",
+                    onClick = { onNavigate(DashboardRoutes.CHAT) },
+                    variant = SoftButtonVariant.Soft,
+                    size = SoftButtonSize.Sm,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // ── Inline reschedule slot picker ────────────────────────────────
+        if (isRescheduleTarget) {
+            Spacer(modifier = Modifier.height(12.dp))
+            SoftDivider()
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Pick a new slot",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = InkToken
+                    )
+                )
+                SoftButton(
+                    text = "Cancel",
+                    onClick = onClearReschedule,
+                    variant = SoftButtonVariant.Ghost,
+                    size = SoftButtonSize.Sm
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (openSlotsForTutor.isEmpty()) {
+                Text(
+                    text = "No open slots available for this tutor.",
+                    style = SoftType.meta,
+                    color = Ink3
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    openSlotsForTutor.forEach { slot ->
+                        SlotPickerRow(
+                            slot = slot,
+                            onSelect = { onReschedule(lesson.id, slot.id) }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Status badge helper for upcoming lessons
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun StatusBadgeForUpcoming(statusNorm: String, isSoon: Boolean) {
+    when (statusNorm) {
+        "PENDING" -> Badge(text = "Pending", tone = BadgeTone.Amber, leadingIcon = null)
+        "CONFIRMED" -> if (isSoon) {
+            Badge(text = "Soon", tone = BadgeTone.Green, leadingIcon = null)
+        } else {
+            Badge(text = "Confirmed", tone = BadgeTone.Green, leadingIcon = null)
+        }
+        else -> if (isSoon) {
+            Badge(text = "Soon", tone = BadgeTone.Amber, leadingIcon = null)
+        } else Unit
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slot picker row (used in inline reschedule panel)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SlotPickerRow(
+    slot: TutorAvailabilityUi,
+    onSelect: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Primary50)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(color = Primary)
+            ) { onSelect() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "${slot.subject}  ·  ${slot.dateLabel}",
+                style = TextStyle(
+                    fontFamily = BodyFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = InkToken
+                )
+            )
+            Text(
+                text = slot.timeLabel,
+                style = SoftType.meta
             )
         }
+        Icon(
+            imageVector = SoftIcons.chev,
+            contentDescription = "Select slot",
+            tint = Primary600,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
@@ -486,11 +656,14 @@ private fun PastLessonCard(
     isReviewed: Boolean,
     onRate: () -> Unit
 ) {
-    val isCancelled = lesson.status == "cancelled"
+    val statusNorm = lesson.status.uppercase()
+    val isCancelledOrDeclined = statusNorm == "CANCELLED" || statusNorm == "DECLINED"
+    val isCompleted = statusNorm == "COMPLETED"
+    val isNoShow = statusNorm == "NO_SHOW"
 
     CardQ(modifier = Modifier
         .fillMaxWidth()
-        .alpha(if (isCancelled) 0.65f else 1f)
+        .alpha(if (isCancelledOrDeclined) 0.65f else 1f)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -502,13 +675,23 @@ private fun PastLessonCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (isCancelled) Bg2 else Primary50),
+                    .background(
+                        when {
+                            isCancelledOrDeclined -> Bg2
+                            isNoShow -> RedBg
+                            else -> Primary50
+                        }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = SoftIcons.cap,
                     contentDescription = null,
-                    tint = if (isCancelled) Ink3 else Primary600,
+                    tint = when {
+                        isCancelledOrDeclined -> Ink3
+                        isNoShow -> Red
+                        else -> Primary600
+                    },
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -520,7 +703,7 @@ private fun PastLessonCard(
                         fontFamily = BodyFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        color = if (isCancelled) Ink3 else InkToken
+                        color = if (isCancelledOrDeclined) Ink3 else InkToken
                     )
                 )
                 Text(
@@ -538,11 +721,14 @@ private fun PastLessonCard(
                 )
             }
 
-            // Status badge
+            // Status badge / rate affordance
             when {
-                isCancelled -> Badge(text = "Cancelled", tone = BadgeTone.Red)
-                isReviewed -> Badge(text = "Rated", tone = BadgeTone.Green)
-                else -> {
+                statusNorm == "CANCELLED" -> Badge(text = "Cancelled", tone = BadgeTone.Red)
+                statusNorm == "DECLINED"  -> Badge(text = "Declined",  tone = BadgeTone.Red)
+                isNoShow                  -> Badge(text = "No-show",   tone = BadgeTone.Red)
+                statusNorm == "DISPUTED"  -> Badge(text = "Disputed",  tone = BadgeTone.Amber)
+                isCompleted && isReviewed -> Badge(text = "Rated",     tone = BadgeTone.Green)
+                isCompleted               -> {
                     // Rate affordance for un-reviewed completed lessons
                     Box(
                         modifier = Modifier
@@ -565,11 +751,12 @@ private fun PastLessonCard(
                         )
                     }
                 }
+                else -> Badge(text = "Done", tone = BadgeTone.Green)
             }
         }
 
-        // Cancel reason row if present
-        if (isCancelled && lesson.cancelReason.isNotBlank()) {
+        // Cancel/decline reason row if present
+        if (isCancelledOrDeclined && lesson.cancelReason.isNotBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             SoftDivider()
             Spacer(modifier = Modifier.height(8.dp))
@@ -639,12 +826,13 @@ private fun LessonsEmptyState(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Returns true when the booking is not yet finished (status == "booked" AND
- * the lesson end time is still in the future, or status is "booked" with no
- * parseable date yet).
+ * Upcoming = PENDING or CONFIRMED and end time is in the future (or unparseable).
+ * Everything else (COMPLETED, CANCELLED, DECLINED, NO_SHOW, DISPUTED, or past-dated) is Past.
  */
 private fun LessonBookingUi.isUpcoming(now: LocalDateTime): Boolean {
-    if (status == "completed" || status == "cancelled") return false
+    val s = status.uppercase()
+    if (s == "COMPLETED" || s == "CANCELLED" || s == "DECLINED" || s == "NO_SHOW" || s == "DISPUTED") return false
+    // PENDING or CONFIRMED: check time
     val end = parseLessonEndDt() ?: return true   // treat unparseable as upcoming
     return end.isAfter(now)
 }
