@@ -338,7 +338,10 @@ fun MainShellScreen(
                                     onReportTutorChanged = onReportTutorChanged,
                                     onReportReasonChanged = onReportReasonChanged,
                                     onReportDetailsChanged = onReportDetailsChanged,
-                                    onSubmitReport = onSubmitReport
+                                    onSubmitReport = onSubmitReport,
+                                    onToggleReviewTag = viewModel::toggleReviewTag,
+                                    onSetReviewAnonymous = viewModel::setReviewAnonymous,
+                                    onReportSeverityChanged = viewModel::onReportSeverityChanged
                                 )
                             }
                             composable(DashboardRoutes.PROFILE) {

@@ -1,6 +1,7 @@
 package Smart.Campus.PWR.ui.screens
 
 import Smart.Campus.PWR.auth.UserRole
+import Smart.Campus.PWR.tutoring.TutorRatings
 import Smart.Campus.PWR.ui.components.MessageBlock
 import Smart.Campus.PWR.ui.components.MainList
 import Smart.Campus.PWR.ui.components.TutorPicker
@@ -97,7 +98,10 @@ fun ReviewsTab(
     onReportTutorChanged: (String) -> Unit,
     onReportReasonChanged: (String) -> Unit,
     onReportDetailsChanged: (String) -> Unit,
-    onSubmitReport: () -> Unit
+    onSubmitReport: () -> Unit,
+    onToggleReviewTag: (String) -> Unit = {},
+    onSetReviewAnonymous: (Boolean) -> Unit = {},
+    onReportSeverityChanged: (String) -> Unit = {}
 ) {
     MainList {
         MessageBlock(state.errorMessage, state.infoMessage)
@@ -115,9 +119,12 @@ fun ReviewsTab(
                 onReviewRatingChanged = onReviewRatingChanged,
                 onReviewCommentChanged = onReviewCommentChanged,
                 onSubmitReview = onSubmitReview,
+                onToggleReviewTag = onToggleReviewTag,
+                onSetReviewAnonymous = onSetReviewAnonymous,
                 onReportTutorChanged = onReportTutorChanged,
                 onReportReasonChanged = onReportReasonChanged,
                 onReportDetailsChanged = onReportDetailsChanged,
+                onReportSeverityChanged = onReportSeverityChanged,
                 onSubmitReport = onSubmitReport
             )
         } else {
@@ -137,9 +144,12 @@ private fun StudentReviewsContent(
     onReviewRatingChanged: (String) -> Unit,
     onReviewCommentChanged: (String) -> Unit,
     onSubmitReview: () -> Unit,
+    onToggleReviewTag: (String) -> Unit,
+    onSetReviewAnonymous: (Boolean) -> Unit,
     onReportTutorChanged: (String) -> Unit,
     onReportReasonChanged: (String) -> Unit,
     onReportDetailsChanged: (String) -> Unit,
+    onReportSeverityChanged: (String) -> Unit,
     onSubmitReport: () -> Unit
 ) {
     val lessons = reviewableLessons(state)
@@ -262,10 +272,10 @@ private fun StudentReviewsContent(
             }
         }
 
-        // Quick tags ("What went well?")
+        // Quick tags ("What went well?") — backed by reviewForm.selectedTags, NOT folded into comment
         WentWellTags(
-            comment = state.reviewForm.comment,
-            onCommentChanged = onReviewCommentChanged
+            selectedTags = state.reviewForm.selectedTags,
+            onToggleTag = onToggleReviewTag
         )
 
         // Free-text note + anon toggle + submit
@@ -292,7 +302,6 @@ private fun StudentReviewsContent(
 
             Spacer(Modifier.height(12.dp))
 
-            // DESIGN-PLACEHOLDER: no anon field — visual toggle only, no state
             CardFlat {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -310,8 +319,10 @@ private fun StudentReviewsContent(
                             style = SoftType.meta
                         )
                     }
-                    // DESIGN-PLACEHOLDER: visual toggle only
-                    AnonTogglePlaceholder()
+                    AnonToggle(
+                        checked = state.reviewForm.anonymous,
+                        onCheckedChange = onSetReviewAnonymous
+                    )
                 }
             }
 
@@ -377,6 +388,7 @@ private fun StudentReviewsContent(
         onReportTutorChanged = onReportTutorChanged,
         onReportReasonChanged = onReportReasonChanged,
         onReportDetailsChanged = onReportDetailsChanged,
+        onReportSeverityChanged = onReportSeverityChanged,
         onSubmitReport = onSubmitReport
     )
 }
@@ -386,6 +398,7 @@ private fun StudentReviewsContent(
 @Composable
 private fun TutorReviewsContent(state: SmartCampusUiState) {
     val reviews = state.dashboardState.reviewsForMe
+    val currentUid = state.currentUser?.uid.orEmpty()
 
     if (reviews.isEmpty()) {
         CardFlat {
@@ -427,12 +440,10 @@ private fun TutorReviewsContent(state: SmartCampusUiState) {
         return
     }
 
-    // ── Summary card ─────────────────────────────────────────────────────────
-    val avg = reviews.map { it.rating }.average().toFloat()
-    val avgStr = String.format("%.1f", avg)
-    val maxCount = listOf(5, 4, 3, 2, 1)
-        .maxOf { star -> reviews.count { it.rating == star } }
-        .coerceAtLeast(1)
+    // ── Summary card — real stats via TutorRatings ────────────────────────────
+    val stats = TutorRatings.tutorRatingStats(currentUid, reviews)
+    val avgStr = String.format("%.1f", stats.avg)
+    val maxDist = stats.dist.maxOrNull()?.coerceAtLeast(1) ?: 1
 
     SoftCard {
         Row(
@@ -454,21 +465,21 @@ private fun TutorReviewsContent(state: SmartCampusUiState) {
                         color = InkToken
                     )
                 )
-                StarsRow(value = avg, size = StarSize.Sm)
+                StarsRow(value = stats.avg.toFloat(), size = StarSize.Sm)
                 Text(
-                    text = "${reviews.size} reviews",
+                    text = "${stats.count} reviews",
                     style = SoftType.meta
                 )
             }
 
-            // Distribution bars
+            // Distribution bars — dist[0]=5★ … dist[4]=1★
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                listOf(5, 4, 3, 2, 1).forEach { star ->
-                    val count = reviews.count { it.rating == star }
-                    val fraction = count.toFloat() / maxCount.toFloat()
+                stats.dist.forEachIndexed { index, count ->
+                    val star = 5 - index
+                    val fraction = count.toFloat() / maxDist.toFloat()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -495,11 +506,13 @@ private fun TutorReviewsContent(state: SmartCampusUiState) {
         }
     }
 
-    // ── Top tags derived from comments ────────────────────────────────────────
-    val tagCounts = WELL_TAGS
-        .map { tag -> tag to reviews.count { it.comment.contains(tag, ignoreCase = true) } }
-        .filter { (_, count) -> count > 0 }
-        .sortedByDescending { (_, count) -> count }
+    // ── Top tags — aggregated from review.tags (not from comment text) ────────
+    val tagCounts = reviews
+        .flatMap { it.tags }
+        .groupingBy { it }
+        .eachCount()
+        .entries
+        .sortedByDescending { it.value }
 
     if (tagCounts.isNotEmpty()) {
         @OptIn(ExperimentalLayoutApi::class)
@@ -513,7 +526,7 @@ private fun TutorReviewsContent(state: SmartCampusUiState) {
         }
     }
 
-    // ── Recent reviews ────────────────────────────────────────────────────────
+    // ── Recent reviews — anonymous ones show "Anonymous" ─────────────────────
     SectionHead(title = "Recent")
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         reviews.forEach { review ->
@@ -554,10 +567,7 @@ private val WELL_TAGS = listOf(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WentWellTags(comment: String, onCommentChanged: (String) -> Unit) {
-    // Track which tags are currently embedded in the comment
-    var selectedTags by remember { mutableStateOf(setOf<String>()) }
-
+private fun WentWellTags(selectedTags: List<String>, onToggleTag: (String) -> Unit) {
     SoftCard {
         Text(
             text = "WHAT WENT WELL?",
@@ -574,26 +584,7 @@ private fun WentWellTags(comment: String, onCommentChanged: (String) -> Unit) {
                     text = tag,
                     selected = isSelected,
                     leadingIcon = if (isSelected) SoftIcons.check else null,
-                    onClick = {
-                        val newSelected = if (isSelected) {
-                            selectedTags - tag
-                        } else {
-                            selectedTags + tag
-                        }
-                        selectedTags = newSelected
-                        // Fold tags into comment: keep free-text after a separator
-                        val freeText = comment
-                            .split("\n---\n")
-                            .lastOrNull()
-                            .orEmpty()
-                            .trim()
-                        val tagPart = newSelected.joinToString(", ")
-                        onCommentChanged(
-                            if (tagPart.isNotEmpty() && freeText.isNotEmpty()) "$tagPart\n---\n$freeText"
-                            else if (tagPart.isNotEmpty()) tagPart
-                            else freeText
-                        )
-                    }
+                    onClick = { onToggleTag(tag) }
                 )
             }
         }
@@ -602,7 +593,8 @@ private fun WentWellTags(comment: String, onCommentChanged: (String) -> Unit) {
 
 @Composable
 private fun ReviewListCard(review: TutorReviewUi, showStudent: Boolean) {
-    val name = if (showStudent) review.studentDisplayName else review.tutorDisplayName
+    val rawName = if (showStudent) review.studentDisplayName else review.tutorDisplayName
+    val name = if (showStudent && review.anonymous) "Anonymous" else rawName
     val subject = review.subject.ifBlank { "General" }
     val (subjBg, subjFg) = subjectColors(subject)
 
@@ -742,19 +734,24 @@ private fun LessonPickRow(
 }
 
 @Composable
-private fun AnonTogglePlaceholder() {
-    // DESIGN-PLACEHOLDER: no anon field in the data model — visual only
+private fun AnonToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val trackColor = if (checked) Primary else Bg2
+    val thumbOffset = if (checked) 21.dp else 3.dp
     Box(
         modifier = Modifier
             .width(44.dp)
             .height(26.dp)
             .clip(RoundedCornerShape(50))
-            .background(Bg2),
+            .background(trackColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onCheckedChange(!checked) },
         contentAlignment = Alignment.CenterStart
     ) {
         Box(
             modifier = Modifier
-                .padding(start = 3.dp)
+                .padding(start = thumbOffset)
                 .size(20.dp)
                 .clip(CircleShape)
                 .background(White)
@@ -771,6 +768,7 @@ private fun ReportSection(
     onReportTutorChanged: (String) -> Unit,
     onReportReasonChanged: (String) -> Unit,
     onReportDetailsChanged: (String) -> Unit,
+    onReportSeverityChanged: (String) -> Unit,
     onSubmitReport: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -863,6 +861,23 @@ private fun ReportSection(
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = "SEVERITY",
+                style = SoftType.eyebrow,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("LOW", "MEDIUM", "HIGH").forEach { level ->
+                    Chip(
+                        text = level.lowercase().replaceFirstChar { it.uppercase() },
+                        selected = state.reportForm.severity == level,
+                        onClick = { onReportSeverityChanged(level) }
+                    )
+                }
+            }
 
             Spacer(Modifier.height(14.dp))
 
