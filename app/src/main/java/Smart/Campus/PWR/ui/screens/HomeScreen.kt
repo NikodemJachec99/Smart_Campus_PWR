@@ -17,12 +17,10 @@ import Smart.Campus.PWR.ui.components.softindigo.SoftDivider
 import Smart.Campus.PWR.ui.components.softindigo.SoftIconButton
 import Smart.Campus.PWR.ui.components.softindigo.SoftTopBar
 import Smart.Campus.PWR.ui.components.softindigo.StarsRow
-import Smart.Campus.PWR.ui.components.softindigo.StatusDot
 import Smart.Campus.PWR.ui.components.softindigo.SubjectDot
 import Smart.Campus.PWR.ui.components.softindigo.Tile
 import Smart.Campus.PWR.ui.components.softindigo.subjectColors
 import Smart.Campus.PWR.ui.icons.SoftIcons
-import Smart.Campus.PWR.ui.state.AssignmentUi
 import Smart.Campus.PWR.ui.state.DashboardRoutes
 import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.SmartCampusUiState
@@ -72,7 +70,7 @@ import java.time.format.TextStyle as JTextStyle
 import java.util.Locale
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HomeTab — public entry point; signature preserved verbatim
+// HomeTab — public entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -84,7 +82,11 @@ fun HomeTab(
     @Suppress("UNUSED_PARAMETER") onCancelBooking: (String, String, String) -> Unit,
     onNavigate: (String) -> Unit,
     onToggleRole: () -> Unit,
-    onOpenNotifications: () -> Unit
+    onOpenNotifications: () -> Unit,
+    onAcceptBooking: (String) -> Unit = {},
+    onDeclineBooking: (String, String) -> Unit = { _, _ -> },
+    onMarkCompleted: (String) -> Unit = {},
+    onMarkNoShow: (String) -> Unit = {}
 ) {
     when (activeRole) {
         UserRole.STUDENT -> StudentHomeContent(
@@ -97,7 +99,11 @@ fun HomeTab(
             state = state,
             onToggleRole = { onClearMessages(); onToggleRole() },
             onNavigate = onNavigate,
-            onOpenNotifications = onOpenNotifications
+            onOpenNotifications = onOpenNotifications,
+            onAcceptBooking = onAcceptBooking,
+            onDeclineBooking = onDeclineBooking,
+            onMarkCompleted = onMarkCompleted,
+            onMarkNoShow = onMarkNoShow
         )
         else -> StudentHomeContent(
             state = state,
@@ -126,8 +132,15 @@ private fun StudentHomeContent(
     val lessons = state.dashboardState.myStudentBookings
     val nextLesson = pickNextLesson(lessons)
     val nextLessonMinutes = nextLesson?.let { minutesUntil(it) }
-    val tutors = state.dashboardState.tutors
-    val isTutor = false
+    // Recommended tutors sorted by rating descending
+    val recommendedTutors = state.dashboardState.tutors
+        .sortedByDescending { it.ratingAvg }
+        .take(4)
+    // Subject counts from available slots (distinct tutor IDs per subject)
+    val availableSlots = state.dashboardState.availableTutorSlots
+    val subjectSlotCounts = availableSlots
+        .groupBy { it.subject }
+        .mapValues { (_, slots) -> slots.map { it.tutorId }.distinct().size }
 
     MainList {
         // ── Top bar ──────────────────────────────────────────────────────────
@@ -155,7 +168,7 @@ private fun StudentHomeContent(
         )
 
         // ── Role switch ───────────────────────────────────────────────────────
-        RoleSwitch(isTutor = isTutor, onToggle = onToggleRole, fullWidth = true)
+        RoleSwitch(isTutor = false, onToggle = onToggleRole, fullWidth = true)
 
         // ── Next lesson hero card ─────────────────────────────────────────────
         if (nextLesson != null) {
@@ -191,7 +204,8 @@ private fun StudentHomeContent(
             onAction = { onNavigate(DashboardRoutes.CALENDAR) }
         )
         BrowseSubjectsGrid(
-            bookings = lessons,
+            subjectCounts = subjectSlotCounts,
+            studentBookings = lessons,
             onSubjectClick = { onNavigate(DashboardRoutes.CALENDAR) }
         )
 
@@ -201,7 +215,7 @@ private fun StudentHomeContent(
             action = "See all",
             onAction = { onNavigate(DashboardRoutes.CALENDAR) }
         )
-        if (tutors.isEmpty()) {
+        if (recommendedTutors.isEmpty()) {
             CardQ(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "No tutors to show yet — check the Calendar tab.",
@@ -210,7 +224,7 @@ private fun StudentHomeContent(
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                tutors.take(4).forEach { tutor ->
+                recommendedTutors.forEach { tutor ->
                     TutorRecommendationCard(tutor = tutor)
                 }
             }
@@ -230,7 +244,11 @@ private fun TutorTodayContent(
     state: SmartCampusUiState,
     onToggleRole: () -> Unit,
     onNavigate: (String) -> Unit,
-    onOpenNotifications: () -> Unit
+    onOpenNotifications: () -> Unit,
+    onAcceptBooking: (String) -> Unit,
+    onDeclineBooking: (String, String) -> Unit,
+    onMarkCompleted: (String) -> Unit,
+    onMarkNoShow: (String) -> Unit
 ) {
     val displayName = state.currentUser?.displayName.orEmpty()
     val firstName = displayName.split(" ").firstOrNull().orEmpty()
@@ -238,18 +256,18 @@ private fun TutorTodayContent(
     val hasUnread = state.dashboardState.notificationCount > 0
     val allTutorBookings = state.dashboardState.myTutorBookings
     val todayStr = LocalDate.now().toString()
-    val todayBookings = allTutorBookings.filter {
-        it.status == "booked" && it.dateLabel == todayStr
-    }
-    val isTutor = true
 
-    // Tutor summary stats
+    // Today's bookings: CONFIRMED or COMPLETED/NO_SHOW for today
+    val todayBookings = allTutorBookings.filter { it.dateLabel == todayStr }
+        .filter { it.status in listOf("CONFIRMED", "COMPLETED", "NO_SHOW", "PENDING") }
+
+    // Pending requests (tutor action required)
+    val pendingRequests = allTutorBookings.filter { it.status == "PENDING" }
+
+    // Summary stats
     val sessionsCount = todayBookings.size
     val bookedHours = computeHours(todayBookings)
-    val lessonsLeft = todayBookings.filter { session ->
-        val dt = parseLessonDateTime(session)
-        dt != null && dt.isAfter(LocalDateTime.now())
-    }.size
+    val distinctStudents = todayBookings.map { it.studentId }.distinct().size
 
     // Today's date label for hero card
     val todayDayName = LocalDate.now().dayOfWeek
@@ -258,6 +276,11 @@ private fun TutorTodayContent(
     val todayMonthName = LocalDate.now().month
         .getDisplayName(JTextStyle.SHORT, Locale.ENGLISH)
     val todayLabel = "$todayDayName · $todayMonthName $todayDateNum"
+
+    // How many lessons still to happen today
+    val lessonsLeft = todayBookings.filter { session ->
+        session.status == "CONFIRMED" && parseLessonDateTime(session)?.isAfter(LocalDateTime.now()) == true
+    }.size
 
     MainList {
         // ── Top bar ──────────────────────────────────────────────────────────
@@ -282,15 +305,37 @@ private fun TutorTodayContent(
         )
 
         // ── Role switch ───────────────────────────────────────────────────────
-        RoleSwitch(isTutor = isTutor, onToggle = onToggleRole, fullWidth = true)
+        RoleSwitch(isTutor = true, onToggle = onToggleRole, fullWidth = true)
 
         // ── Today summary hero card ───────────────────────────────────────────
         TutorSummaryHeroCard(
             dateLabel = todayLabel,
             lessonsLeft = lessonsLeft,
             sessionsCount = sessionsCount,
-            bookedHours = bookedHours
+            bookedHours = bookedHours,
+            distinctStudents = distinctStudents
         )
+
+        // ── Booking requests ─────────────────────────────────────────────────
+        SectionHead(title = "Booking requests")
+        if (pendingRequests.isEmpty()) {
+            CardQ(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "No pending requests.",
+                    style = SoftType.bodySm
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                pendingRequests.forEach { request ->
+                    BookingRequestCard(
+                        booking = request,
+                        onAccept = { onAcceptBooking(request.id) },
+                        onDecline = { onDeclineBooking(request.id, "Declined by tutor") }
+                    )
+                }
+            }
+        }
 
         // ── Today's schedule ─────────────────────────────────────────────────
         SectionHead(
@@ -307,47 +352,16 @@ private fun TutorTodayContent(
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                todayBookings.sortedWith(compareBy { it.startHour })
+                todayBookings
+                    .filter { it.status in listOf("CONFIRMED", "COMPLETED", "NO_SHOW") }
+                    .sortedWith(compareBy { it.startHour })
                     .forEach { session ->
-                        val now = LocalDateTime.now()
-                        val dt = parseLessonDateTime(session)
-                        val sessionState = when {
-                            dt == null -> "soon"
-                            dt.isAfter(now) && minutesUntil(session) != null &&
-                                minutesUntil(session)!! <= 90 -> "next"
-                            dt.isAfter(now) -> "soon"
-                            else -> "done"
-                        }
-                        TodayScheduleRow(session = session, sessionState = sessionState)
+                        TodayScheduleRow(
+                            session = session,
+                            onMarkCompleted = onMarkCompleted,
+                            onMarkNoShow = onMarkNoShow
+                        )
                     }
-            }
-        }
-
-        // ── Booking requests ─────────────────────────────────────────────────
-        // DESIGN-PLACEHOLDER: no booking-request model in the backend.
-        // Showing upcoming bookings styled as request cards instead.
-        SectionHead(title = "Upcoming bookings")
-        val upcomingBookings = allTutorBookings
-            .filter { it.status == "booked" }
-            .filter {
-                val dt = parseLessonDateTime(it)
-                dt != null && dt.isAfter(LocalDateTime.now())
-            }
-            .sortedWith(compareBy({ it.dateLabel }, { it.startHour }))
-            .take(3)
-
-        if (upcomingBookings.isEmpty()) {
-            CardQ(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "No upcoming bookings.",
-                    style = SoftType.bodySm
-                )
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                upcomingBookings.forEach { booking ->
-                    UpcomingBookingCard(booking = booking)
-                }
             }
         }
 
@@ -465,7 +479,7 @@ private fun NextLessonHeroCard(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         HeroBadge("${lesson.startHour}–${lesson.endHour}")
-                        HeroBadge("Online")
+                        if (lesson.format.isNotBlank()) HeroBadge(lesson.format.lowercase().replaceFirstChar { it.uppercase() })
                     }
                 }
             }
@@ -486,7 +500,6 @@ private fun NextLessonHeroCard(
                 variant = SoftButtonVariant.Ghost,
                 size = SoftButtonSize.Sm
             )
-            // Override colors to match white-on-indigo design
             Box(
                 modifier = Modifier
                     .weight(1.5f)
@@ -555,13 +568,15 @@ private fun EmptyNextLessonCard() {
 
 @Composable
 private fun BrowseSubjectsGrid(
-    bookings: List<LessonBookingUi>,
+    subjectCounts: Map<String, Int>,
+    studentBookings: List<LessonBookingUi>,
     onSubjectClick: () -> Unit
 ) {
-    // Derive subjects from bookings; fall back to a static starter set
-    val subjectsFromBookings = bookings.map { it.subject }.distinct()
+    // Merge subjects from live slot data + bookings + static starter set
+    val fromSlots = subjectCounts.keys.toList()
+    val fromBookings = studentBookings.map { it.subject }.distinct()
     val staticSubjects = listOf("Calculus", "Lin. Algebra", "Thermo", "OOP / Java")
-    val subjects = (subjectsFromBookings + staticSubjects).distinct().take(6)
+    val subjects = (fromSlots + fromBookings + staticSubjects).distinct().take(6)
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         subjects.chunked(2).forEach { row ->
@@ -571,6 +586,7 @@ private fun BrowseSubjectsGrid(
             ) {
                 row.forEach { subject ->
                     val (_, fg) = subjectColors(subject)
+                    val count = subjectCounts[subject]
                     Tile(
                         modifier = Modifier.weight(1f),
                         padding = 13.dp
@@ -597,7 +613,7 @@ private fun BrowseSubjectsGrid(
                                     )
                                 )
                                 Text(
-                                    text = "Find tutors",
+                                    text = if (count != null && count > 0) "$count ${if (count == 1) "tutor" else "tutors"}" else "Find tutors",
                                     style = SoftType.meta
                                 )
                             }
@@ -627,25 +643,23 @@ private fun TutorRecommendationCard(tutor: Smart.Campus.PWR.ui.state.TutorSummar
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = tutor.displayName,
-                        style = TextStyle(
-                            fontFamily = BodyFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.5.sp,
-                            color = InkToken
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = tutor.displayName,
+                            style = TextStyle(
+                                fontFamily = BodyFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.5.sp,
+                                color = InkToken
+                            )
                         )
-                    )
-                    // No rate in TutorSummaryUi; show a placeholder primary-colored label
-                    Text(
-                        text = "Book",
-                        style = TextStyle(
-                            fontFamily = BodyFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Primary600
-                        )
-                    )
+                        if (tutor.verified) {
+                            Badge(text = "Verified", tone = BadgeTone.Green)
+                        }
+                    }
                 }
                 Text(
                     text = tutor.subjects.ifBlank { "Various subjects" },
@@ -657,8 +671,16 @@ private fun TutorRecommendationCard(tutor: Smart.Campus.PWR.ui.state.TutorSummar
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    StarsRow(value = 5f)
-                    Text(text = "5.0", style = SoftType.meta)
+                    val displayRating = tutor.ratingAvg.toFloat().coerceIn(0f, 5f)
+                    StarsRow(value = if (tutor.ratingCount > 0) displayRating else 0f)
+                    if (tutor.ratingCount > 0) {
+                        Text(
+                            text = "${String.format(Locale.ENGLISH, "%.1f", tutor.ratingAvg)} (${tutor.ratingCount})",
+                            style = SoftType.meta
+                        )
+                    } else {
+                        Text(text = "No reviews yet", style = SoftType.meta)
+                    }
                 }
             }
         }
@@ -674,7 +696,8 @@ private fun TutorSummaryHeroCard(
     dateLabel: String,
     lessonsLeft: Int,
     sessionsCount: Int,
-    bookedHours: Double
+    bookedHours: Double,
+    distinctStudents: Int
 ) {
     val heroShape = RoundedCornerShape(22.dp)
     val gradient = Brush.linearGradient(
@@ -727,7 +750,7 @@ private fun TutorSummaryHeroCard(
             listOf(
                 sessionsCount.toString() to "Sessions",
                 "${formatHours(bookedHours)}h" to "Booked",
-                "–" to "Earning"
+                distinctStudents.toString() to "Students"
             ).forEachIndexed { index, (value, label) ->
                 if (index > 0) {
                     Box(
@@ -766,30 +789,106 @@ private fun TutorSummaryHeroCard(
     }
 }
 
+/** Card for a pending booking request that the tutor can accept or decline. */
+@Composable
+private fun BookingRequestCard(
+    booking: LessonBookingUi,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    CardQ(modifier = Modifier.fillMaxWidth(), padding = 15.dp) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            InitialsAvatar(name = booking.studentDisplayName.ifBlank { "?" }, size = 42.dp)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = booking.studentDisplayName.ifBlank { "Student" },
+                        style = TextStyle(
+                            fontFamily = BodyFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = InkToken
+                        )
+                    )
+                    Badge(text = "Pending", tone = BadgeTone.Amber)
+                }
+                val (_, subjectFg) = subjectColors(booking.subject)
+                Text(
+                    text = "${booking.subject} · ${booking.dateLabel} · ${booking.startHour}",
+                    style = TextStyle(
+                        fontFamily = BodyFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.5.sp,
+                        color = subjectFg
+                    )
+                )
+                // Optional topic / request message
+                val detail = listOfNotNull(
+                    booking.topic.takeIf { it.isNotBlank() }?.let { "Topic: $it" },
+                    booking.requestMessage.takeIf { it.isNotBlank() }
+                ).joinToString(" · ")
+                if (detail.isNotBlank()) {
+                    Text(
+                        text = detail,
+                        style = SoftType.bodySm,
+                        modifier = Modifier.padding(top = 1.dp)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SoftButton(
+                        text = "Accept",
+                        onClick = onAccept,
+                        variant = SoftButtonVariant.Primary,
+                        size = SoftButtonSize.Sm,
+                        modifier = Modifier.weight(1f)
+                    )
+                    SoftButton(
+                        text = "Decline",
+                        onClick = onDecline,
+                        variant = SoftButtonVariant.Ghost,
+                        size = SoftButtonSize.Sm,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun TodayScheduleRow(
     session: LessonBookingUi,
-    sessionState: String   // "next" | "soon" | "done"
+    onMarkCompleted: (String) -> Unit,
+    onMarkNoShow: (String) -> Unit
 ) {
-    val isOpen = session.studentDisplayName.isBlank()
-    val cardModifier = Modifier.fillMaxWidth()
-    if (isOpen) {
-        CardFlat(modifier = cardModifier) {
-            ScheduleRowContent(session = session, sessionState = sessionState, isOpen = true)
-        }
-    } else {
-        CardQ(modifier = cardModifier, padding = 14.dp) {
-            ScheduleRowContent(session = session, sessionState = sessionState, isOpen = false)
-        }
+    CardQ(modifier = Modifier.fillMaxWidth(), padding = 14.dp) {
+        ScheduleRowContent(
+            session = session,
+            onMarkCompleted = onMarkCompleted,
+            onMarkNoShow = onMarkNoShow
+        )
     }
 }
 
 @Composable
 private fun ScheduleRowContent(
     session: LessonBookingUi,
-    sessionState: String,
-    isOpen: Boolean
+    onMarkCompleted: (String) -> Unit,
+    onMarkNoShow: (String) -> Unit
 ) {
+    val now = LocalDateTime.now()
+    val dt = parseLessonDateTime(session)
+    // A CONFIRMED lesson is "past-or-now" if its start time is <= now
+    val isPastOrNow = dt != null && !dt.isAfter(now)
+
     Row(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
@@ -812,10 +911,7 @@ private fun ScheduleRowContent(
                 if (start != null && end != null && end > start) ((end - start) * 60).toInt() else null
             }
             if (durationMin != null) {
-                Text(
-                    text = "${durationMin} min",
-                    style = SoftType.meta
-                )
+                Text(text = "${durationMin} min", style = SoftType.meta)
             }
         }
 
@@ -843,15 +939,13 @@ private fun ScheduleRowContent(
                         color = InkToken
                     )
                 )
-                when {
-                    isOpen -> Badge(text = "Open", tone = BadgeTone.Gray)
-                    sessionState == "next" -> Badge(
-                        text = "Next",
-                        tone = BadgeTone.Green,
-                        leadingIcon = null
-                    )
-                    sessionState == "soon" -> Badge(text = "Soon", tone = BadgeTone.Prim)
-                    else -> Badge(text = "Done", tone = BadgeTone.Gray)
+                // Status badge
+                when (session.status) {
+                    "PENDING"   -> Badge(text = "Pending",   tone = BadgeTone.Amber)
+                    "CONFIRMED" -> Badge(text = "Confirmed", tone = BadgeTone.Green)
+                    "COMPLETED" -> Badge(text = "Done",      tone = BadgeTone.Gray)
+                    "NO_SHOW"   -> Badge(text = "No-show",   tone = BadgeTone.Red)
+                    else        -> Badge(text = session.status, tone = BadgeTone.Gray)
                 }
             }
 
@@ -859,70 +953,34 @@ private fun ScheduleRowContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                if (!isOpen && session.studentDisplayName.isNotBlank()) {
+                if (session.studentDisplayName.isNotBlank()) {
                     InitialsAvatar(name = session.studentDisplayName, size = 20.dp)
                 }
                 Text(
-                    text = if (isOpen) "Waiting for a student" else "${session.studentDisplayName} · Online",
+                    text = session.studentDisplayName.ifBlank { "No student" },
                     style = SoftType.bodySm
                 )
             }
 
-            if (!isOpen) {
-                Text(
-                    text = "View →",
-                    style = TextStyle(
-                        fontFamily = BodyFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.5.sp,
-                        color = Primary600
-                    ),
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun UpcomingBookingCard(booking: LessonBookingUi) {
-    // DESIGN-PLACEHOLDER: no booking-request model in the backend.
-    // Rendering upcoming confirmed bookings in the request-card style.
-    // Accept/Decline buttons are intentionally omitted (no request flow exists).
-    CardQ(modifier = Modifier.fillMaxWidth(), padding = 15.dp) {
-        Row(
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            InitialsAvatar(name = booking.studentDisplayName, size = 42.dp)
-            Column(modifier = Modifier.weight(1f)) {
+            // Mark done / No-show buttons for CONFIRMED lessons that are past or happening now
+            if (session.status == "CONFIRMED" && isPastOrNow) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    Text(
-                        text = booking.studentDisplayName,
-                        style = TextStyle(
-                            fontFamily = BodyFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = InkToken
-                        )
+                    SoftButton(
+                        text = "Mark done",
+                        onClick = { onMarkCompleted(session.id) },
+                        variant = SoftButtonVariant.Soft,
+                        size = SoftButtonSize.Sm
                     )
-                    Badge(text = "Confirmed", tone = BadgeTone.Green)
+                    SoftButton(
+                        text = "No-show",
+                        onClick = { onMarkNoShow(session.id) },
+                        variant = SoftButtonVariant.Ghost,
+                        size = SoftButtonSize.Sm
+                    )
                 }
-                val (subjectBg, subjectFg) = subjectColors(booking.subject)
-                Text(
-                    text = "${booking.subject} · ${booking.dateLabel} · ${booking.startHour}",
-                    style = TextStyle(
-                        fontFamily = BodyFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.5.sp,
-                        color = subjectFg
-                    ),
-                    modifier = Modifier.padding(top = 1.dp)
-                )
             }
         }
     }
@@ -942,7 +1000,7 @@ private fun greetingForHour(hour: Int): String = when (hour) {
 private fun pickNextLesson(lessons: List<LessonBookingUi>): LessonBookingUi? {
     val now = LocalDateTime.now()
     return lessons
-        .filter { it.status == "booked" }
+        .filter { it.status == "CONFIRMED" }
         .mapNotNull { lesson ->
             val dt = parseLessonDateTime(lesson) ?: return@mapNotNull null
             if (dt.isBefore(now)) null else lesson to dt
@@ -965,7 +1023,7 @@ private fun minutesUntil(lesson: LessonBookingUi): Long? {
 }
 
 private fun computeHours(lessons: List<LessonBookingUi>): Double {
-    return lessons.filter { it.status == "booked" }.sumOf { lesson ->
+    return lessons.sumOf { lesson ->
         val start = parseHour(lesson.startHour)
         val end = parseHour(lesson.endHour)
         if (start != null && end != null && end > start) end - start else 0.0

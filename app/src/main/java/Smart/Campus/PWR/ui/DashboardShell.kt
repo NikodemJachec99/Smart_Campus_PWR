@@ -235,7 +235,11 @@ fun MainShellScreen(
                                     onCancelBooking = onCancelBooking,
                                     onNavigate = { navController.navigateToRoute(it) },
                                     onToggleRole = onToggleRole,
-                                    onOpenNotifications = { showNotifications = true }
+                                    onOpenNotifications = { showNotifications = true },
+                                    onAcceptBooking = viewModel::acceptBooking,
+                                    onDeclineBooking = viewModel::declineBooking,
+                                    onMarkCompleted = viewModel::markLessonCompleted,
+                                    onMarkNoShow = viewModel::markNoShow
                                 )
                             }
                             composable(DashboardRoutes.CALENDAR) {
