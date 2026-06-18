@@ -411,22 +411,18 @@ fun ReportCard(
     report: TutorReportUi,
     onStatusChange: ((String, String) -> Unit)? = null
 ) {
-    val severityBadgeTone = when (report.status) {
-        "open"        -> BadgeTone.Red
-        "in-review", "in_review" -> BadgeTone.Amber
-        "resolved"    -> BadgeTone.Green
-        "dismissed"   -> BadgeTone.Gray
-        else          -> BadgeTone.Amber
+    // Severity badge — reflects the report's REAL severity field (LOW/MEDIUM/HIGH)
+    val severityBadgeTone = when (report.severity.uppercase()) {
+        "HIGH"   -> BadgeTone.Red
+        "MEDIUM" -> BadgeTone.Amber
+        "LOW"    -> BadgeTone.Gray
+        else     -> BadgeTone.Amber
     }
-    val severityLabel = when (report.status) {
-        "open"        -> "Open"
-        "in-review", "in_review" -> "In review"
-        "resolved"    -> "Resolved"
-        "dismissed"   -> "Dismissed"
-        else          -> report.status.replaceFirstChar { it.uppercase() }
-    }
+    val severityLabel = report.severity.replaceFirstChar { it.uppercase() }
 
-    val canAct = onStatusChange != null && (report.status == "open" || report.status == "in-review" || report.status == "in_review")
+    val isOpen     = report.status == "open"
+    val isInReview = report.status == "in-review" || report.status == "in_review"
+    val canAct = onStatusChange != null && (isOpen || isInReview)
 
     SoftCard(modifier = Modifier.fillMaxWidth()) {
         // Header row: report id + severity badge
@@ -507,6 +503,23 @@ fun ReportCard(
                 )
             }
         }
+        // Moderator note (if present)
+        if (report.moderatorNote.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Bg)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "Note: ${report.moderatorNote}",
+                    style = SoftType.bodySm,
+                    color = Amber
+                )
+            }
+        }
         // Action buttons
         if (canAct && onStatusChange != null) {
             Spacer(Modifier.height(10.dp))
@@ -533,27 +546,52 @@ fun ReportCard(
                         )
                     )
                 }
-                Box(modifier = Modifier.width(1.dp).height(46.dp).background(Line))
-                // Investigate button
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(color = Primary600)
-                        ) { onStatusChange(report.id, "in-review") }
-                        .padding(vertical = 13.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "Investigate →",
-                        style = TextStyle(
-                            fontFamily = BodyFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Primary600
+                if (isOpen) {
+                    // Open: show Investigate
+                    Box(modifier = Modifier.width(1.dp).height(46.dp).background(Line))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(color = Primary600)
+                            ) { onStatusChange(report.id, "in_review") }
+                            .padding(vertical = 13.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Investigate",
+                            style = TextStyle(
+                                fontFamily = BodyFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Primary600
+                            )
                         )
-                    )
+                    }
+                } else if (isInReview) {
+                    // In-review: show Resolve
+                    Box(modifier = Modifier.width(1.dp).height(46.dp).background(Line))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(color = Primary600)
+                            ) { onStatusChange(report.id, "resolved") }
+                            .padding(vertical = 13.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Resolve",
+                            style = TextStyle(
+                                fontFamily = BodyFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Primary600
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -610,7 +648,8 @@ fun AdminUserCard(
     inspector: AdminUserInspectorUi?,
     onUpdateUserRoles: (String, Boolean, Boolean) -> Unit,
     onToggleInspector: (String) -> Unit,
-    onDeleteUser: ((String) -> Unit)? = null
+    onDeleteUser: ((String) -> Unit)? = null,
+    onSetVerified: ((Boolean) -> Unit)? = null
 ) {
     var student by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.STUDENT)) }
     var tutor by remember(user.uid, user.roles) { mutableStateOf(user.hasRole(UserRole.TUTOR)) }
@@ -701,6 +740,16 @@ fun AdminUserCard(
                             size = SoftButtonSize.Sm
                         )
                     }
+                }
+                // Verify toggle (tutors only, non-admin)
+                if (onSetVerified != null && user.hasRole(UserRole.TUTOR) && !user.hasRole(UserRole.ADMIN)) {
+                    SoftButton(
+                        text = if (user.verified) "Unverify" else "Verify",
+                        onClick = { onSetVerified(!user.verified) },
+                        variant = if (user.verified) SoftButtonVariant.Soft else SoftButtonVariant.Primary,
+                        size = SoftButtonSize.Sm,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SoftButton(

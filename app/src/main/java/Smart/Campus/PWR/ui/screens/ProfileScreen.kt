@@ -8,6 +8,7 @@ import Smart.Campus.PWR.ui.components.softindigo.RoleSwitch
 import Smart.Campus.PWR.ui.components.softindigo.SoftButton
 import Smart.Campus.PWR.ui.components.softindigo.SoftDivider
 import Smart.Campus.PWR.ui.components.softindigo.SoftIconButton
+import Smart.Campus.PWR.ui.components.softindigo.SoftTextField
 import Smart.Campus.PWR.ui.components.softindigo.SoftTopBar
 import Smart.Campus.PWR.ui.components.softindigo.Tile
 import Smart.Campus.PWR.ui.icons.SoftIcons
@@ -43,7 +44,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,8 +60,17 @@ fun ProfileTab(
     state: SmartCampusUiState,
     onLogout: () -> Unit,
     onToggleRole: () -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    onStartProfileEdit: () -> Unit = {},
+    onProfileBioChanged: (String) -> Unit = {},
+    onProfileSubjectsChanged: (String) -> Unit = {},
+    onProfileExperienceYearsChanged: (String) -> Unit = {},
+    onProfileProgramChanged: (String) -> Unit = {},
+    onProfileStudyYearChanged: (String) -> Unit = {},
+    onProfileFacultyChanged: (String) -> Unit = {},
+    onSaveProfile: () -> Unit = {}
 ) {
+    var editing by remember { mutableStateOf(false) }
     val isTutor = activeRole == UserRole.TUTOR
     val studentBookings = state.dashboardState.myStudentBookings
     val tutorBookings = state.dashboardState.myTutorBookings
@@ -115,11 +128,19 @@ fun ProfileTab(
                         style = SoftType.h2,
                         color = InkToken
                     )
-                    // DESIGN-PLACEHOLDER: program/year not yet in AppUser model
-                    Text(
-                        text = "Computer Science · 2nd year", // DESIGN-PLACEHOLDER
-                        style = SoftType.meta
-                    )
+                    val programMeta = buildString {
+                        val p = currentUser.program.orEmpty().trim()
+                        val y = currentUser.studyYear.orEmpty().trim()
+                        if (p.isNotBlank()) append(p)
+                        if (p.isNotBlank() && y.isNotBlank()) append(" · ")
+                        if (y.isNotBlank()) append(y)
+                    }
+                    if (programMeta.isNotBlank()) {
+                        Text(
+                            text = programMeta,
+                            style = SoftType.meta
+                        )
+                    }
                     Text(
                         text = currentUser.email,
                         style = SoftType.meta.copy(color = Ink4)
@@ -202,6 +223,15 @@ fun ProfileTab(
             // ── Menu card ─────────────────────────────────────────────────────
             val menuItems = buildList {
                 add(ProfileMenuItem(
+                    title = "Edit profile",
+                    subtitle = null,
+                    icon = SoftIcons.settings,
+                    onClick = {
+                        editing = !editing
+                        if (!editing) { /* do nothing when closing via menu */ } else { onStartProfileEdit() }
+                    }
+                ))
+                add(ProfileMenuItem(
                     title = "Reviews you've written",
                     subtitle = null,
                     icon = SoftIcons.star,
@@ -217,7 +247,7 @@ fun ProfileTab(
                 }
                 add(ProfileMenuItem(
                     title = "Notifications",
-                    subtitle = null, // DESIGN-PLACEHOLDER
+                    subtitle = null,
                     icon = SoftIcons.bell,
                     onClick = { /* DESIGN-PLACEHOLDER */ }
                 ))
@@ -234,6 +264,83 @@ fun ProfileTab(
                     ProfileMenuRow(item = item)
                     if (index < menuItems.lastIndex) {
                         SoftDivider(modifier = Modifier.padding(horizontal = 12.dp))
+                    }
+                }
+            }
+
+            // ── Edit profile form ─────────────────────────────────────────────
+            if (editing) {
+                CardQ {
+                    Text(text = "Edit profile", style = SoftType.h3, color = InkToken)
+                    Spacer(Modifier.height(12.dp))
+                    SoftTextField(
+                        value = state.profileEdit.bio,
+                        onValueChange = onProfileBioChanged,
+                        label = "Bio",
+                        placeholder = "A short description about yourself",
+                        singleLine = false,
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SoftTextField(
+                        value = state.profileEdit.subjects,
+                        onValueChange = onProfileSubjectsChanged,
+                        label = "Subjects (comma-separated)",
+                        placeholder = "e.g. Maths, Physics, Java",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SoftTextField(
+                        value = state.profileEdit.experienceYears,
+                        onValueChange = onProfileExperienceYearsChanged,
+                        label = "Experience years",
+                        placeholder = "e.g. 2",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SoftTextField(
+                        value = state.profileEdit.program,
+                        onValueChange = onProfileProgramChanged,
+                        label = "Program",
+                        placeholder = "e.g. Computer Science",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SoftTextField(
+                        value = state.profileEdit.studyYear,
+                        onValueChange = onProfileStudyYearChanged,
+                        label = "Study year",
+                        placeholder = "e.g. 2nd year",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SoftTextField(
+                        value = state.profileEdit.faculty,
+                        onValueChange = onProfileFacultyChanged,
+                        label = "Faculty",
+                        placeholder = "e.g. Faculty of Computer Science",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SoftButton(
+                            text = "Cancel",
+                            onClick = { editing = false },
+                            variant = SoftButtonVariant.Soft,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SoftButton(
+                            text = "Save",
+                            onClick = {
+                                onSaveProfile()
+                                editing = false
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }

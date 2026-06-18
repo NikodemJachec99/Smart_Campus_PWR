@@ -195,6 +195,7 @@ fun SmartCampusApp(viewModel: SmartCampusViewModel = viewModel()) {
             onDeleteAvailability = viewModel::deleteAvailabilitySlot,
             onUpdateAvailability = viewModel::updateAvailabilitySlot,
             onUpdateReportStatus = viewModel::updateReportStatusByAdmin,
+            onAdminSetVerified = viewModel::adminSetVerified,
             onClearMessages = viewModel::clearMessages
         )
     }

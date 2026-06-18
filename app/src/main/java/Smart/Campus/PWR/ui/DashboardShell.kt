@@ -355,7 +355,15 @@ fun MainShellScreen(
                                     state = state,
                                     onLogout = onLogout,
                                     onToggleRole = onToggleRole,
-                                    onNavigate = { navController.navigateToRoute(it) }
+                                    onNavigate = { navController.navigateToRoute(it) },
+                                    onStartProfileEdit = viewModel::startProfileEdit,
+                                    onProfileBioChanged = viewModel::onProfileBioChanged,
+                                    onProfileSubjectsChanged = viewModel::onProfileSubjectsChanged,
+                                    onProfileExperienceYearsChanged = viewModel::onProfileExperienceYearsChanged,
+                                    onProfileProgramChanged = viewModel::onProfileProgramChanged,
+                                    onProfileStudyYearChanged = viewModel::onProfileStudyYearChanged,
+                                    onProfileFacultyChanged = viewModel::onProfileFacultyChanged,
+                                    onSaveProfile = viewModel::saveProfile
                                 )
                             }
                         }
@@ -394,6 +402,7 @@ fun AdminShellScreen(
     onDeleteAvailability: (String) -> Unit,
     onUpdateAvailability: (String, String, String, String, String) -> Unit,
     onUpdateReportStatus: (String, String) -> Unit,
+    onAdminSetVerified: (String, Boolean) -> Unit = { _, _ -> },
     onClearMessages: () -> Unit
 ) {
     var editingSlot by remember { mutableStateOf<TutorAvailabilityUi?>(null) }
@@ -591,7 +600,8 @@ fun AdminShellScreen(
                         inspector = state.adminInspectors[user.uid],
                         onUpdateUserRoles = onUpdateUserRoles,
                         onToggleInspector = onToggleInspector,
-                        onDeleteUser = onDeleteUser
+                        onDeleteUser = onDeleteUser,
+                        onSetVerified = { verified -> onAdminSetVerified(user.uid, verified) }
                     )
                     if (idx < visibleUsers.lastIndex) {
                         SoftDivider()
