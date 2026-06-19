@@ -43,6 +43,7 @@ import Smart.Campus.PWR.ui.theme.Ink2
 import Smart.Campus.PWR.ui.theme.Ink3
 import Smart.Campus.PWR.ui.theme.Ink4
 import Smart.Campus.PWR.ui.theme.InkToken
+import Smart.Campus.PWR.ui.theme.Red
 import Smart.Campus.PWR.ui.theme.Line
 import Smart.Campus.PWR.ui.theme.Primary
 import Smart.Campus.PWR.ui.theme.Primary100
@@ -95,6 +96,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -1596,6 +1598,56 @@ private fun ScreenBookingConfirm(
 //  TUTOR branch — ScreenTutorSchedule
 // ═══════════════════════════════════════════════════════════════════════════════
 
+private fun minutesBetweenHhmm(start: String, end: String): Int = try {
+    val (sh, sm) = start.split(":").map { it.toInt() }
+    val (eh, em) = end.split(":").map { it.toInt() }
+    ((eh * 60 + em) - (sh * 60 + sm)).coerceAtLeast(0)
+} catch (e: Exception) {
+    60
+}
+
+private fun isValidTimeRange(start: String, end: String): Boolean =
+    minutesBetweenHhmm(start, end) > 0
+
+private fun formatSlotDateLabel(iso: String): String = try {
+    LocalDate.parse(iso).format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH))
+} catch (e: Exception) {
+    iso
+}
+
+/** A read-only, tappable field that opens a picker (avoids the text-field tap-swallow bug). */
+@Composable
+private fun PickerField(
+    label: String,
+    value: String,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Column(modifier = modifier) {
+        Text(label, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ink2))
+        Spacer(Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(CardSurface)
+                .border(1.dp, Line, RoundedCornerShape(12.dp))
+                .clickable { onClick() }
+                .padding(horizontal = 14.dp, vertical = 14.dp)
+        ) {
+            Text(
+                value.ifBlank { placeholder },
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (value.isBlank()) Ink4 else InkToken
+                )
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TutorScheduleScreen(
@@ -1614,40 +1666,13 @@ private fun TutorScheduleScreen(
     onDeleteAvailability: (String) -> Unit,
     onCancelBooking: (String, String, String) -> Unit
 ) {
-    var showDatePicker by remember { mutableStateOf(false) }
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
     var showNewSlotForm by remember { mutableStateOf(false) }
 
-    val datePickerState = rememberDatePickerState(
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                cal.set(java.util.Calendar.MINUTE, 0)
-                cal.set(java.util.Calendar.SECOND, 0)
-                cal.set(java.util.Calendar.MILLISECOND, 0)
-                return utcTimeMillis >= cal.timeInMillis
-            }
-        }
-    )
     val startTimeState = rememberTimePickerState(initialHour = 12, initialMinute = 0)
     val endTimeState = rememberTimePickerState(initialHour = 13, initialMinute = 0)
 
-    if (showDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                        onAvailabilityDateChanged(formatter.format(Date(millis)))
-                    }
-                    showDatePicker = false
-                }) { Text("OK") }
-            }
-        ) { DatePicker(state = datePickerState) }
-    }
     if (showStartTimePicker) {
         TimePickerDialogWrapper(
             title = "Select start time",
@@ -1679,7 +1704,7 @@ private fun TutorScheduleScreen(
     val today = LocalDate.now()
     val isoFmt = DateTimeFormatter.ISO_LOCAL_DATE
     val dowFmt = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
-    val days = (0..5).map { offset ->
+    val days = (0..13).map { offset ->
         val date = today.plusDays(offset.toLong())
         val dateLabel = date.format(isoFmt)
         val count = state.dashboardState.myAvailability.count { it.dateLabel == dateLabel }
@@ -1694,6 +1719,9 @@ private fun TutorScheduleScreen(
     val openForDay = slotsForDay.filter { !it.isBooked }
 
     val form = state.availabilityForm
+
+    // The new slot's date follows the day selected in the strip above (no separate date field).
+    LaunchedEffect(selectedDateLabel) { onAvailabilityDateChanged(selectedDateLabel) }
 
     Column(modifier = Modifier.fillMaxSize().background(Bg)) {
         SoftTopBar(
@@ -1888,72 +1916,50 @@ private fun TutorScheduleScreen(
                         )
                         Spacer(Modifier.height(10.dp))
 
-                        // Date + Time row
+                        // Date comes from the day selected in the calendar strip above
+                        Text(
+                            "Date",
+                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ink2)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            formatSlotDateLabel(selectedDateLabel),
+                            style = SoftType.title.copy(fontSize = 14.sp)
+                        )
+                        Text(
+                            "Pick the day in the calendar above",
+                            style = SoftType.meta.copy(fontSize = 11.sp)
+                        )
+                        Spacer(Modifier.height(10.dp))
+
+                        // From / To — tappable picker fields that open the time dialog
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showDatePicker = true }
-                                ) {
-                                    SoftTextField(
-                                        value = form.date,
-                                        onValueChange = {},
-                                        label = "Date",
-                                        placeholder = "Tap to pick"
-                                    )
-                                }
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                // Start + end time inline
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.Bottom
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable { showStartTimePicker = true }
-                                    ) {
-                                        SoftTextField(
-                                            value = form.startHour,
-                                            onValueChange = {},
-                                            label = "From",
-                                            placeholder = "12:00"
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable { showEndTimePicker = true }
-                                    ) {
-                                        SoftTextField(
-                                            value = form.endHour,
-                                            onValueChange = {},
-                                            label = "To",
-                                            placeholder = "13:00"
-                                        )
-                                    }
-                                }
-                            }
+                            PickerField(
+                                label = "From",
+                                value = form.startHour,
+                                placeholder = "Pick time",
+                                modifier = Modifier.weight(1f),
+                                onClick = { showStartTimePicker = true }
+                            )
+                            PickerField(
+                                label = "To",
+                                value = form.endHour,
+                                placeholder = "Pick time",
+                                modifier = Modifier.weight(1f),
+                                onClick = { showEndTimePicker = true }
+                            )
                         }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        // Duration chips: 60 / 90 / 120 min
-                        Text("Duration", style = SoftType.title.copy(fontSize = 13.sp))
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(60, 90, 120).forEach { mins ->
-                                Chip(
-                                    text = "${mins / 60}${if (mins % 60 != 0) ".5" else ""} h",
-                                    selected = form.durationMinutes == mins,
-                                    onClick = { onAvailabilityDurationChanged(mins) }
-                                )
-                            }
+                        if (form.startHour.isNotBlank() && form.endHour.isNotBlank()
+                            && !isValidTimeRange(form.startHour, form.endHour)
+                        ) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "End time must be after the start time.",
+                                style = SoftType.meta.copy(fontSize = 11.sp, color = Red)
+                            )
                         }
 
                         Spacer(Modifier.height(12.dp))
@@ -2014,14 +2020,17 @@ private fun TutorScheduleScreen(
                             text = "Publish slot",
                             onClick = {
                                 onClearMessages()
+                                onAvailabilityDurationChanged(
+                                    minutesBetweenHhmm(form.startHour, form.endHour)
+                                )
                                 onAddAvailability()
                                 showNewSlotForm = false
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = form.subject.isNotBlank()
-                                && form.date.isNotBlank()
                                 && form.startHour.isNotBlank()
-                                && form.endHour.isNotBlank(),
+                                && form.endHour.isNotBlank()
+                                && isValidTimeRange(form.startHour, form.endHour),
                             trailingIcon = SoftIcons.arrow
                         )
                     }
