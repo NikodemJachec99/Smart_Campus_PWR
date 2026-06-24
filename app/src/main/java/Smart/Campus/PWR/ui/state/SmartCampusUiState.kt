@@ -125,5 +125,10 @@ data class SmartCampusUiState(
     val dashboardState: DashboardUiState = DashboardUiState(),
     val profileEdit: ProfileEditState = ProfileEditState(),
     val bookingRequest: BookingRequestState = BookingRequestState(),
-    val rescheduleTargetBookingId: String? = null
+    val rescheduleTargetBookingId: String? = null,
+    /**
+     * One-shot navigation intent: when true, the student Find/Calendar flow opens
+     * straight to the filtered results list (set by Home "Browse by subject", then consumed).
+     */
+    val openTutorSearchResults: Boolean = false
 )

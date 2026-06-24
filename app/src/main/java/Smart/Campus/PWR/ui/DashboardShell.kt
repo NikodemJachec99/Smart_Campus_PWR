@@ -19,7 +19,9 @@ import Smart.Campus.PWR.ui.components.softindigo.Badge
 import Smart.Campus.PWR.ui.components.softindigo.BadgeTone
 import Smart.Campus.PWR.ui.components.softindigo.CardQ
 import Smart.Campus.PWR.ui.components.softindigo.Chip
+import Smart.Campus.PWR.ui.components.softindigo.InitialsAvatar
 import Smart.Campus.PWR.ui.components.softindigo.SearchField
+import Smart.Campus.PWR.ui.components.softindigo.SegTabs
 import Smart.Campus.PWR.ui.components.softindigo.SectionHead
 import Smart.Campus.PWR.ui.components.softindigo.SoftButton
 import Smart.Campus.PWR.ui.components.softindigo.SoftButtonVariant
@@ -27,7 +29,6 @@ import Smart.Campus.PWR.ui.components.softindigo.SoftCard
 import Smart.Campus.PWR.ui.components.softindigo.SoftDivider
 import Smart.Campus.PWR.ui.components.softindigo.SoftIconButton
 import Smart.Campus.PWR.ui.components.softindigo.SoftTextField
-import Smart.Campus.PWR.ui.components.softindigo.SoftTopBar
 import Smart.Campus.PWR.ui.icons.SoftIcons
 import Smart.Campus.PWR.ui.theme.Amber
 import Smart.Campus.PWR.ui.theme.Bg
@@ -39,11 +40,12 @@ import Smart.Campus.PWR.ui.theme.Ink3
 import Smart.Campus.PWR.ui.theme.InkToken
 import Smart.Campus.PWR.ui.theme.Line
 import Smart.Campus.PWR.ui.theme.Primary
+import Smart.Campus.PWR.ui.theme.Primary50
 import Smart.Campus.PWR.ui.theme.Primary100
+import Smart.Campus.PWR.ui.theme.Primary600
 import Smart.Campus.PWR.ui.theme.Red
 import Smart.Campus.PWR.ui.theme.RedBg
 import Smart.Campus.PWR.ui.theme.SoftType
-import Smart.Campus.PWR.ui.theme.White
 import Smart.Campus.PWR.ui.screens.AssignmentsTab
 import Smart.Campus.PWR.ui.screens.CalendarTab
 import Smart.Campus.PWR.ui.screens.ChatTab
@@ -51,6 +53,7 @@ import Smart.Campus.PWR.ui.screens.ConversationScreen
 import Smart.Campus.PWR.ui.screens.CourseMaterialsScreen
 import Smart.Campus.PWR.ui.screens.CoursesTab
 import Smart.Campus.PWR.ui.screens.HomeTab
+import Smart.Campus.PWR.ui.screens.LessonDetailScreen
 import Smart.Campus.PWR.ui.screens.LessonsTab
 import Smart.Campus.PWR.ui.screens.NotificationsScreen
 import Smart.Campus.PWR.ui.screens.ProfileTab
@@ -104,7 +107,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -227,6 +234,17 @@ fun MainShellScreen(
                     )
                 }
 
+                state.dashboardState.lessonDetailBookingId != null -> {
+                    BackHandler { viewModel.closeLessonDetail() }
+                    LessonDetailScreen(
+                        state = state,
+                        onBack = { viewModel.closeLessonDetail() },
+                        onUpload = viewModel::uploadLessonMaterial,
+                        onDelete = viewModel::deleteLessonMaterial,
+                        onMessage = viewModel::openDirectWith
+                    )
+                }
+
                 else -> {
                     Box(
                         modifier = Modifier
@@ -246,6 +264,11 @@ fun MainShellScreen(
                                     onRefresh = onRefreshDashboard,
                                     onCancelBooking = onCancelBooking,
                                     onNavigate = { navController.navigateToRoute(it) },
+                                    onBrowseSubject = { subject ->
+                                        viewModel.browseSubject(subject)
+                                        navController.navigateToRoute(DashboardRoutes.CALENDAR)
+                                    },
+                                    onOpenLessonDetail = viewModel::openLessonDetail,
                                     onToggleRole = onToggleRole,
                                     onOpenNotifications = { showNotifications = true },
                                     onAcceptBooking = viewModel::acceptBooking,
@@ -285,6 +308,7 @@ fun MainShellScreen(
                                     onTutorSearchSortChanged = viewModel::onTutorSearchSortChanged,
                                     onClearTutorSearchFilters = viewModel::clearTutorSearchFilters,
                                     onOpenDirectWith = viewModel::openDirectWith,
+                                    onConsumeOpenResults = viewModel::consumeOpenTutorSearchResults,
                                     onNavigate = { navController.navigateToRoute(it) }
                                 )
                             }
@@ -298,7 +322,8 @@ fun MainShellScreen(
                                     onStartReschedule = viewModel::startReschedule,
                                     onReschedule = viewModel::rescheduleBooking,
                                     onClearReschedule = viewModel::clearReschedule,
-                                    onOpenDirectWith = viewModel::openDirectWith
+                                    onOpenDirectWith = viewModel::openDirectWith,
+                                    onOpenDetail = viewModel::openLessonDetail
                                 )
                             }
                             composable(DashboardRoutes.ASSIGNMENTS) {
@@ -427,6 +452,7 @@ fun AdminShellScreen(
     var userQuery by remember { mutableStateOf("") }
     var userRoleFilter by remember { mutableStateOf("All") }
     var showCreateUser by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(0) }
 
     editingSlot?.let { slot ->
         EditSlotDialog(
@@ -468,223 +494,282 @@ fun AdminShellScreen(
         matchesQuery && matchesRole
     }
 
+    val admin = state.currentUser
+
     MainList {
-        // ─── MODERATION TOP BAR ─────────────────────────────────────────────
-        SoftTopBar(
-            leading = {
+        // ─── HERO ────────────────────────────────────────────────────────────
+        SoftCard(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .background(InkToken, CircleShape),
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Primary50),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(SoftIcons.shield, contentDescription = null, tint = White, modifier = Modifier.size(19.dp))
+                    Icon(SoftIcons.shield, contentDescription = null, tint = Primary600, modifier = Modifier.size(26.dp))
                 }
-            },
-            title = "Moderation",
-            subtitle = "Smart Campus PWR · admin",
-            actions = {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Control Center", style = SoftType.h2, color = InkToken)
+                    Text("Smart Campus PWR · moderation", style = SoftType.meta)
+                }
                 SoftIconButton(
                     icon = SoftIcons.repeat,
                     onClick = { onClearMessages(); onRefresh() }
                 )
             }
-        )
+            if (admin != null) {
+                Spacer(Modifier.height(14.dp))
+                SoftDivider()
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    InitialsAvatar(name = admin.displayName, size = 38.dp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(admin.displayName, style = SoftType.title, color = InkToken)
+                        Text("@${admin.login}", style = SoftType.meta, color = Ink3)
+                    }
+                    Badge(text = "Admin", tone = BadgeTone.Red)
+                }
+            }
+        }
 
         MessageBlock(state.errorMessage, state.infoMessage)
 
-        // ─── STAT BAND ──────────────────────────────────────────────────────
-        CardQ(modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                listOf(
-                    Triple(openCount.toString(),     "Open",      Red),
-                    Triple(inReviewCount.toString(), "In review", Amber),
-                    Triple(resolvedCount.toString(), "Resolved",  Green)
-                ).forEachIndexed { idx, (count, label, color) ->
-                    if (idx > 0) {
-                        Box(modifier = Modifier.width(1.dp).height(48.dp).background(Line))
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(count, style = SoftType.h2, color = color)
-                        Spacer(Modifier.height(2.dp))
-                        Text(label, style = SoftType.meta)
-                    }
-                }
-            }
-        }
-
-        // ─── FILTER CHIPS ───────────────────────────────────────────────────
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Open", "In review", "Resolved").forEach { filter ->
-                Chip(
-                    text = filter,
-                    selected = reportFilter == filter,
-                    onClick = { reportFilter = filter }
-                )
-            }
-        }
-
-        // ─── REPORT CARDS ───────────────────────────────────────────────────
-        if (visibleReports.isEmpty()) {
-            CardQ(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "No reports in this category.",
-                    style = SoftType.body,
-                    color = Ink3
-                )
-            }
-        } else {
-            visibleReports.forEach { report ->
-                ReportCard(
-                    report = report,
-                    onStatusChange = onUpdateReportStatus
-                )
-            }
-        }
-
-        // ─── ALL TUTORING SLOTS ─────────────────────────────────────────────
-        SectionHead(title = "Tutoring slots", action = if (state.dashboardState.availableTutorSlots.isEmpty()) null else "${state.dashboardState.availableTutorSlots.size}")
-        if (state.dashboardState.availableTutorSlots.isEmpty()) {
-            CardQ(modifier = Modifier.fillMaxWidth()) {
-                Text("No slots found.", style = SoftType.body, color = Ink3)
-            }
-        } else {
-            state.dashboardState.availableTutorSlots.forEach { slot ->
-                AvailabilityCard(
-                    slot = slot,
-                    onBook = null,
-                    onDelete = onDeleteAvailability,
-                    onEdit = { editingSlot = it }
-                )
-            }
-        }
-
-        // ─── USERS TOP BAR ──────────────────────────────────────────────────
-        SoftTopBar(
-            modifier = Modifier.padding(top = 8.dp),
-            leading = {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(InkToken, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(SoftIcons.user, contentDescription = null, tint = White, modifier = Modifier.size(19.dp))
-                }
-            },
-            title = "Users",
-            subtitle = "${state.adminUsers.size} accounts",
-            actions = {
-                SoftIconButton(
-                    icon = SoftIcons.plus,
-                    prim = true,
-                    onClick = { showCreateUser = !showCreateUser }
-                )
-            }
+        // ─── OVERVIEW STAT BAND ──────────────────────────────────────────────
+        AdminStatBand(
+            listOf(
+                Triple(state.adminUsers.size.toString(), "Users", Primary600),
+                Triple(state.adminUsers.count { it.hasRole(UserRole.TUTOR) }.toString(), "Tutors", Green),
+                Triple(state.adminUsers.count { it.hasRole(UserRole.STUDENT) }.toString(), "Students", InkToken),
+                Triple(state.dashboardState.availableTutorSlots.size.toString(), "Slots", Amber)
+            )
         )
 
-        // ─── USER SEARCH + ROLE FILTERS ─────────────────────────────────────
-        SearchField(
-            value = userQuery,
-            onValueChange = { userQuery = it },
-            placeholder = "Search by name or login…",
+        // ─── SECTION TABS ────────────────────────────────────────────────────
+        SegTabs(
+            options = listOf("Reports", "Users", "Slots"),
+            selectedIndex = selectedTab,
+            onSelect = { selectedTab = it },
             modifier = Modifier.fillMaxWidth()
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("All", "Students", "Tutors", "Admins").forEach { role ->
-                Chip(
-                    text = role,
-                    selected = userRoleFilter == role,
-                    onClick = { userRoleFilter = role }
-                )
-            }
-        }
 
-        // ─── USER LIST ──────────────────────────────────────────────────────
-        if (visibleUsers.isEmpty()) {
-            CardQ(modifier = Modifier.fillMaxWidth()) {
-                Text("No users match.", style = SoftType.body, color = Ink3)
-            }
-        } else {
-            CardQ(modifier = Modifier.fillMaxWidth(), padding = 6.dp) {
-                visibleUsers.forEachIndexed { idx, user ->
-                    AdminUserCard(
-                        user = user,
-                        inspector = state.adminInspectors[user.uid],
-                        onUpdateUserRoles = onUpdateUserRoles,
-                        onToggleInspector = onToggleInspector,
-                        onDeleteUser = onDeleteUser,
-                        onSetVerified = { verified -> onAdminSetVerified(user.uid, verified) }
+        when (selectedTab) {
+            // ═══ REPORTS ═════════════════════════════════════════════════════
+            0 -> {
+                AdminStatBand(
+                    listOf(
+                        Triple(openCount.toString(),     "Open",      Red),
+                        Triple(inReviewCount.toString(), "In review", Amber),
+                        Triple(resolvedCount.toString(), "Resolved",  Green)
                     )
-                    if (idx < visibleUsers.lastIndex) {
-                        SoftDivider()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Open", "In review", "Resolved").forEach { filter ->
+                        Chip(
+                            text = filter,
+                            selected = reportFilter == filter,
+                            onClick = { reportFilter = filter }
+                        )
+                    }
+                }
+                if (visibleReports.isEmpty()) {
+                    AdminEmpty(
+                        icon = SoftIcons.flag,
+                        title = "No reports here",
+                        subtitle = "Nothing in the “$reportFilter” bucket right now."
+                    )
+                } else {
+                    visibleReports.forEach { report ->
+                        ReportCard(report = report, onStatusChange = onUpdateReportStatus)
+                    }
+                }
+            }
+
+            // ═══ USERS ═══════════════════════════════════════════════════════
+            1 -> {
+                SearchField(
+                    value = userQuery,
+                    onValueChange = { userQuery = it },
+                    placeholder = "Search by name or login…",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("All", "Students", "Tutors", "Admins").forEach { role ->
+                        Chip(
+                            text = role,
+                            selected = userRoleFilter == role,
+                            onClick = { userRoleFilter = role }
+                        )
+                    }
+                }
+                if (visibleUsers.isEmpty()) {
+                    AdminEmpty(
+                        icon = SoftIcons.user,
+                        title = "No users match",
+                        subtitle = "Try a different name, login or role filter."
+                    )
+                } else {
+                    CardQ(modifier = Modifier.fillMaxWidth(), padding = 6.dp) {
+                        visibleUsers.forEachIndexed { idx, user ->
+                            AdminUserCard(
+                                user = user,
+                                inspector = state.adminInspectors[user.uid],
+                                onUpdateUserRoles = onUpdateUserRoles,
+                                onToggleInspector = onToggleInspector,
+                                onDeleteUser = onDeleteUser,
+                                onSetVerified = { verified -> onAdminSetVerified(user.uid, verified) }
+                            )
+                            if (idx < visibleUsers.lastIndex) {
+                                SoftDivider()
+                            }
+                        }
+                    }
+                }
+
+                SoftButton(
+                    text = if (showCreateUser) "Close form" else "Create new user",
+                    onClick = { showCreateUser = !showCreateUser },
+                    leadingIcon = if (showCreateUser) SoftIcons.x else SoftIcons.plus,
+                    variant = if (showCreateUser) SoftButtonVariant.Soft else SoftButtonVariant.Primary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (showCreateUser) {
+                    SoftCard(modifier = Modifier.fillMaxWidth()) {
+                        SectionHead(title = "Create new user")
+                        Spacer(Modifier.height(12.dp))
+                        SoftTextField(
+                            value = state.createUserForm.login,
+                            onValueChange = onCreateLoginChanged,
+                            label = "Login",
+                            placeholder = "login",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        SoftTextField(
+                            value = state.createUserForm.password,
+                            onValueChange = onCreatePasswordChanged,
+                            label = "Password",
+                            placeholder = "••••••••",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        SoftTextField(
+                            value = state.createUserForm.displayName,
+                            onValueChange = onCreateDisplayNameChanged,
+                            label = "Display name",
+                            placeholder = "Full name",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            RoleCheck("Admin",   state.createUserForm.admin,   onCreateAdminChecked)
+                            RoleCheck("Student", state.createUserForm.student, onCreateStudentChecked)
+                            RoleCheck("Tutor",   state.createUserForm.tutor,   onCreateTutorChecked)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        SoftButton(
+                            text = "Create user",
+                            onClick = { onClearMessages(); onCreateUserClick() },
+                            leadingIcon = SoftIcons.check,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
+            // ═══ SLOTS ═══════════════════════════════════════════════════════
+            else -> {
+                SectionHead(
+                    title = "Tutoring slots",
+                    action = if (state.dashboardState.availableTutorSlots.isEmpty()) null
+                             else "${state.dashboardState.availableTutorSlots.size}"
+                )
+                if (state.dashboardState.availableTutorSlots.isEmpty()) {
+                    AdminEmpty(
+                        icon = SoftIcons.calendar,
+                        title = "No tutoring slots",
+                        subtitle = "Tutor availability shows up here as it’s created."
+                    )
+                } else {
+                    state.dashboardState.availableTutorSlots.forEach { slot ->
+                        AvailabilityCard(
+                            slot = slot,
+                            onBook = null,
+                            onDelete = onDeleteAvailability,
+                            onEdit = { editingSlot = it }
+                        )
                     }
                 }
             }
         }
 
-        // ─── CREATE USER FORM (collapsible) ─────────────────────────────────
-        if (showCreateUser) {
-            SoftCard(modifier = Modifier.fillMaxWidth()) {
-                SectionHead(title = "Create new user")
-                Spacer(Modifier.height(12.dp))
-                SoftTextField(
-                    value = state.createUserForm.login,
-                    onValueChange = onCreateLoginChanged,
-                    label = "Login",
-                    placeholder = "login",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                SoftTextField(
-                    value = state.createUserForm.password,
-                    onValueChange = onCreatePasswordChanged,
-                    label = "Password",
-                    placeholder = "••••••••",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                SoftTextField(
-                    value = state.createUserForm.displayName,
-                    onValueChange = onCreateDisplayNameChanged,
-                    label = "Display name",
-                    placeholder = "Full name",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RoleCheck("Admin",   state.createUserForm.admin,   onCreateAdminChecked)
-                    RoleCheck("Student", state.createUserForm.student, onCreateStudentChecked)
-                    RoleCheck("Tutor",   state.createUserForm.tutor,   onCreateTutorChecked)
-                }
-                Spacer(Modifier.height(12.dp))
-                SoftButton(
-                    text = "Create user",
-                    onClick = { onClearMessages(); onCreateUserClick() },
-                    leadingIcon = SoftIcons.plus,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // ─── BOTTOM CREATE BUTTON ────────────────────────────────────────────
-        SoftButton(
-            text = "Create new user",
-            onClick = { showCreateUser = !showCreateUser },
-            leadingIcon = SoftIcons.plus,
-            variant = if (showCreateUser) SoftButtonVariant.Soft else SoftButtonVariant.Primary,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
+        // ─── SIGN OUT ────────────────────────────────────────────────────────
+        Spacer(Modifier.height(4.dp))
         SoftButton(
             text = "Sign out",
             onClick = onLogout,
-            variant = SoftButtonVariant.Ghost,
+            leadingIcon = SoftIcons.logout,
+            variant = SoftButtonVariant.Outline,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+/** Equal-width stat columns split by 1-dp dividers — used for admin overview bands. */
+@Composable
+private fun AdminStatBand(items: List<Triple<String, String, Color>>) {
+    CardQ(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            items.forEachIndexed { idx, (count, label, color) ->
+                if (idx > 0) {
+                    Box(modifier = Modifier.width(1.dp).height(40.dp).background(Line))
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(count, style = SoftType.h2, color = color)
+                    Spacer(Modifier.height(2.dp))
+                    Text(label, style = SoftType.meta)
+                }
+            }
+        }
+    }
+}
+
+/** Friendly empty-state card: muted icon tile + title + caption. */
+@Composable
+private fun AdminEmpty(icon: ImageVector, title: String, subtitle: String) {
+    CardQ(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Bg2),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = Ink3, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(title, style = SoftType.title, color = InkToken)
+            Spacer(Modifier.height(2.dp))
+            Text(subtitle, style = SoftType.bodySm, color = Ink3, textAlign = TextAlign.Center)
+        }
     }
 }
 

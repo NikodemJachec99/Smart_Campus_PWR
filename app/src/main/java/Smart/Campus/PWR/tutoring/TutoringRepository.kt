@@ -362,7 +362,7 @@ class TutoringRepository(
         student: AppUser,
         message: String,
         topic: String
-    ) {
+    ): String {
         val slotRef = firestore.collection("tutor_availability").document(slotId)
         val bookingRef = firestore.collection("bookings").document()
 
@@ -437,6 +437,7 @@ class TutoringRepository(
             }
             transaction.set(bookingRef, bookingPayload)
         }.await()
+        return bookingRef.id
     }
 
     /**
@@ -460,29 +461,33 @@ class TutoringRepository(
             }
 
             val currentStatus = bookingSnapshot.getString("status").orEmpty()
-            if (!BookingRules.isPending(currentStatus)) {
-                throw IllegalStateException("Only PENDING bookings can be accepted (current: $currentStatus).")
-            }
+            // Idempotent: re-accepting an already-confirmed booking is a no-op success
+            // (the tutor's UI may still show it as a pending request until it refreshes).
+            if (currentStatus != "CONFIRMED") {
+                if (!BookingRules.isPending(currentStatus)) {
+                    throw IllegalStateException("Only PENDING bookings can be accepted (current: $currentStatus).")
+                }
 
-            val availabilityId = bookingSnapshot.getString("availabilityId").orEmpty()
-            val slotRef = firestore.collection("tutor_availability").document(availabilityId)
+                val availabilityId = bookingSnapshot.getString("availabilityId").orEmpty()
+                val slotRef = firestore.collection("tutor_availability").document(availabilityId)
 
-            transaction.update(
-                bookingRef,
-                mapOf(
-                    "status" to "CONFIRMED",
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            )
-
-            if (availabilityId.isNotBlank()) {
                 transaction.update(
-                    slotRef,
+                    bookingRef,
                     mapOf(
-                        "status" to "booked",
+                        "status" to "CONFIRMED",
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
                 )
+
+                if (availabilityId.isNotBlank()) {
+                    transaction.update(
+                        slotRef,
+                        mapOf(
+                            "status" to "booked",
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
             }
         }.await()
     }

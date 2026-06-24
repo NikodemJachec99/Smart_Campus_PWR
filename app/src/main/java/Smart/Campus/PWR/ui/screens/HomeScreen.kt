@@ -87,6 +87,8 @@ fun HomeTab(
     onRefresh: () -> Unit,
     @Suppress("UNUSED_PARAMETER") onCancelBooking: (String, String, String) -> Unit,
     onNavigate: (String) -> Unit,
+    onBrowseSubject: (String) -> Unit = {},
+    onOpenLessonDetail: (String) -> Unit = {},
     onToggleRole: () -> Unit,
     onOpenNotifications: () -> Unit,
     onAcceptBooking: (String) -> Unit = {},
@@ -99,12 +101,14 @@ fun HomeTab(
             state = state,
             onToggleRole = { onClearMessages(); onToggleRole() },
             onNavigate = onNavigate,
+            onBrowseSubject = onBrowseSubject,
             onOpenNotifications = onOpenNotifications
         )
         UserRole.TUTOR -> TutorTodayContent(
             state = state,
             onToggleRole = { onClearMessages(); onToggleRole() },
             onNavigate = onNavigate,
+            onOpenDetail = onOpenLessonDetail,
             onOpenNotifications = onOpenNotifications,
             onAcceptBooking = onAcceptBooking,
             onDeclineBooking = onDeclineBooking,
@@ -115,6 +119,7 @@ fun HomeTab(
             state = state,
             onToggleRole = { onClearMessages(); onToggleRole() },
             onNavigate = onNavigate,
+            onBrowseSubject = onBrowseSubject,
             onOpenNotifications = onOpenNotifications
         )
     }
@@ -129,6 +134,7 @@ private fun StudentHomeContent(
     state: SmartCampusUiState,
     onToggleRole: () -> Unit,
     onNavigate: (String) -> Unit,
+    onBrowseSubject: (String) -> Unit,
     onOpenNotifications: () -> Unit
 ) {
     val displayName = state.currentUser?.displayName.orEmpty()
@@ -248,7 +254,7 @@ private fun StudentHomeContent(
         BrowseSubjectsGrid(
             subjectCounts = subjectSlotCounts,
             studentBookings = lessons,
-            onSubjectClick = { onNavigate(DashboardRoutes.CALENDAR) }
+            onSubjectClick = onBrowseSubject
         )
 
         // ── Recommended tutors ────────────────────────────────────────────────
@@ -289,6 +295,7 @@ private fun TutorTodayContent(
     state: SmartCampusUiState,
     onToggleRole: () -> Unit,
     onNavigate: (String) -> Unit,
+    onOpenDetail: (String) -> Unit,
     onOpenNotifications: () -> Unit,
     onAcceptBooking: (String) -> Unit,
     onDeclineBooking: (String, String) -> Unit,
@@ -374,11 +381,18 @@ private fun TutorTodayContent(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 pendingRequests.forEach { request ->
-                    BookingRequestCard(
-                        booking = request,
-                        onAccept = { onAcceptBooking(request.id) },
-                        onDecline = { onDeclineBooking(request.id, "Declined by tutor") }
-                    )
+                    Box(
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onOpenDetail(request.id) }
+                    ) {
+                        BookingRequestCard(
+                            booking = request,
+                            onAccept = { onAcceptBooking(request.id) },
+                            onDecline = { onDeclineBooking(request.id, "Declined by tutor") }
+                        )
+                    }
                 }
             }
         }
@@ -402,11 +416,18 @@ private fun TutorTodayContent(
                     .filter { it.status in listOf("CONFIRMED", "COMPLETED", "NO_SHOW") }
                     .sortedWith(compareBy { it.startHour })
                     .forEach { session ->
-                        TodayScheduleRow(
-                            session = session,
-                            onMarkCompleted = onMarkCompleted,
-                            onMarkNoShow = onMarkNoShow
-                        )
+                        Box(
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onOpenDetail(session.id) }
+                        ) {
+                            TodayScheduleRow(
+                                session = session,
+                                onMarkCompleted = onMarkCompleted,
+                                onMarkNoShow = onMarkNoShow
+                            )
+                        }
                     }
             }
         }
@@ -616,7 +637,7 @@ private fun EmptyNextLessonCard() {
 private fun BrowseSubjectsGrid(
     subjectCounts: Map<String, Int>,
     studentBookings: List<LessonBookingUi>,
-    onSubjectClick: () -> Unit
+    onSubjectClick: (String) -> Unit
 ) {
     // Merge subjects from live slot data + bookings + static starter set
     val fromSlots = subjectCounts.keys.toList()
@@ -645,7 +666,7 @@ private fun BrowseSubjectsGrid(
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
-                                ) { onSubjectClick() }
+                                ) { onSubjectClick(subject) }
                         ) {
                             SubjectDot(subject = subject, size = 40.dp, icon = SoftIcons.cap)
                             Column {

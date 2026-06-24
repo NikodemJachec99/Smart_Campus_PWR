@@ -158,6 +158,7 @@ fun CalendarTab(
     onTutorSearchSortChanged: (String) -> Unit,
     onClearTutorSearchFilters: () -> Unit,
     onOpenDirectWith: (String, String) -> Unit = { _, _ -> },
+    onConsumeOpenResults: () -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
     Box(
@@ -200,6 +201,7 @@ fun CalendarTab(
                 onTutorSearchSortChanged = onTutorSearchSortChanged,
                 onClearTutorSearchFilters = onClearTutorSearchFilters,
                 onOpenDirectWith = onOpenDirectWith,
+                onConsumeOpenResults = onConsumeOpenResults,
                 onNavigate = onNavigate
             )
         }
@@ -228,9 +230,19 @@ private fun StudentFindFlow(
     onTutorSearchSortChanged: (String) -> Unit,
     onClearTutorSearchFilters: () -> Unit,
     onOpenDirectWith: (String, String) -> Unit,
+    onConsumeOpenResults: () -> Unit,
     onNavigate: (String) -> Unit
 ) {
-    var step: StudentStep by remember { mutableStateOf(StudentStep.Find) }
+    var step: StudentStep by remember {
+        mutableStateOf(if (state.openTutorSearchResults) StudentStep.Results else StudentStep.Find)
+    }
+    // Honor the one-shot "open results" intent set by Home "Browse by subject".
+    LaunchedEffect(state.openTutorSearchResults) {
+        if (state.openTutorSearchResults) {
+            step = StudentStep.Results
+            onConsumeOpenResults()
+        }
+    }
 
     when (val s = step) {
         is StudentStep.Find -> ScreenFind(

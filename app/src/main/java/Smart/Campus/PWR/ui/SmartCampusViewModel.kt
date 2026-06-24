@@ -19,6 +19,7 @@ import Smart.Campus.PWR.course.CourseRepository
 import Smart.Campus.PWR.notifications.FcmTokenRegistrar
 import Smart.Campus.PWR.notifications.NotificationRepository
 import Smart.Campus.PWR.notifications.NotificationUtil
+import Smart.Campus.PWR.tutoring.LessonMaterialRepository
 import Smart.Campus.PWR.tutoring.TutoringRepository
 import Smart.Campus.PWR.ui.state.AdminUserInspectorUi
 import Smart.Campus.PWR.ui.state.AppScreen
@@ -36,6 +37,7 @@ import Smart.Campus.PWR.ui.state.CourseFormState
 import Smart.Campus.PWR.ui.state.CourseUi
 import Smart.Campus.PWR.ui.state.CreateUserFormState
 import Smart.Campus.PWR.ui.state.DashboardUiState
+import Smart.Campus.PWR.ui.state.LessonBookingUi
 import Smart.Campus.PWR.ui.state.MessageDeliveryState
 import Smart.Campus.PWR.ui.state.MessageUi
 import Smart.Campus.PWR.ui.state.PendingAttachmentUi
@@ -63,6 +65,7 @@ class SmartCampusViewModel(
     private val tutoringRepository: TutoringRepository = TutoringRepository(),
     private val assignmentRepository: AssignmentRepository = AssignmentRepository(),
     private val courseRepository: CourseRepository = CourseRepository(),
+    private val lessonMaterialRepository: LessonMaterialRepository = LessonMaterialRepository(),
     private val chatRepository: ChatRepository = ChatRepository(),
     private val notificationRepository: NotificationRepository = NotificationRepository()
 ) : ViewModel() {
@@ -80,8 +83,11 @@ class SmartCampusViewModel(
     private var messagesRealtime: ListenerRegistration? = null
     private var typingRealtime: ListenerRegistration? = null
     private var materialsRealtime: ListenerRegistration? = null
+    private var lessonMaterialsRealtime: ListenerRegistration? = null
     private var notificationsRealtime: ListenerRegistration? = null
     private var mySubmissionAssignmentIds: List<String> = emptyList()
+    /** Bookings shown optimistically right after the student books, kept visible until the server returns them. */
+    private val pendingOptimisticBookings = linkedMapOf<String, LessonBookingUi>()
     private val readReceiptInFlight = mutableSetOf<String>()
     private val readReceiptBackoffUntil = mutableMapOf<String, Long>()
     private var lastTypingSentAtMillis = 0L
@@ -317,6 +323,30 @@ class SmartCampusViewModel(
         _uiState.update { it.copy(tutorSearchFilters = it.tutorSearchFilters.copy(sort = value)) }
     }
 
+    /**
+     * Home "Browse by subject": set the subject filter (clearing conflicting free-text
+     * queries) and request that the Find flow jump straight to the results list.
+     */
+    fun browseSubject(subject: String) {
+        _uiState.update {
+            it.copy(
+                tutorSearchFilters = it.tutorSearchFilters.copy(
+                    // Use the unified `query` so the tapped subject shows in the results
+                    // search box (and is editable/clearable), not just a silent filter.
+                    query = subject,
+                    subjectQuery = "",
+                    tutorQuery = ""
+                ),
+                openTutorSearchResults = true
+            )
+        }
+    }
+
+    /** Consume the one-shot results-navigation flag once the Find flow has honored it. */
+    fun consumeOpenTutorSearchResults() {
+        _uiState.update { it.copy(openTutorSearchResults = false) }
+    }
+
     fun clearTutorSearchFilters() {
         _uiState.update { it.copy(tutorSearchFilters = TutorSearchFilterState()) }
     }
@@ -410,6 +440,20 @@ class SmartCampusViewModel(
         _uiState.update { it.copy(bookingRequest = it.bookingRequest.copy(topic = value)) }
     }
 
+    /**
+     * Keeps optimistic just-booked lessons visible across wholesale dashboard refreshes
+     * (loadMainData / realtime replace the whole list). An entry is dropped once the server
+     * returns that booking id, so it transitions seamlessly to the real document.
+     */
+    private fun mergeOptimisticStudentBookings(serverBookings: List<LessonBookingUi>): List<LessonBookingUi> {
+        if (pendingOptimisticBookings.isEmpty()) return serverBookings
+        val serverIds = serverBookings.mapTo(HashSet()) { it.id }
+        pendingOptimisticBookings.keys.removeAll { it in serverIds }
+        if (pendingOptimisticBookings.isEmpty()) return serverBookings
+        return (pendingOptimisticBookings.values.toList() + serverBookings)
+            .sortedWith(compareBy<LessonBookingUi> { it.dateLabel }.thenBy { it.startHour })
+    }
+
     fun bookTutorSlot(slotId: String) {
         val state = _uiState.value
         val user = state.currentUser ?: return
@@ -425,12 +469,37 @@ class SmartCampusViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
             try {
-                tutoringRepository.requestBooking(slotId, user, message, topic)
+                val bookingId = tutoringRepository.requestBooking(slotId, user, message, topic)
+                // Optimistically show the pending lesson right away so it appears in Upcoming
+                // immediately. It is tracked (mergeOptimisticStudentBookings) so the wholesale
+                // dashboard refreshes below can't drop it before the server returns it.
+                state.dashboardState.availableTutorSlots.firstOrNull { it.id == slotId }?.let { s ->
+                    pendingOptimisticBookings[bookingId] = LessonBookingUi(
+                        id = bookingId,
+                        availabilityId = slotId,
+                        tutorId = s.tutorId,
+                        tutorDisplayName = s.tutorDisplayName,
+                        studentId = user.uid,
+                        studentDisplayName = user.displayName,
+                        subject = s.subject,
+                        dateLabel = s.dateLabel,
+                        startHour = s.startHour,
+                        endHour = s.endHour,
+                        status = "PENDING",
+                        format = s.format,
+                        location = s.location,
+                        meetingUrl = s.meetingUrl,
+                        topic = topic
+                    )
+                }
                 _uiState.update {
                     it.copy(
                         isMainSubmitting = false,
                         bookingRequest = BookingRequestState(),
-                        infoMessage = "Booking request sent."
+                        infoMessage = "Booking request sent.",
+                        dashboardState = it.dashboardState.copy(
+                            myStudentBookings = mergeOptimisticStudentBookings(it.dashboardState.myStudentBookings)
+                        )
                     )
                 }
                 loadMainData(user)
@@ -459,28 +528,53 @@ class SmartCampusViewModel(
     fun acceptBooking(bookingId: String) {
         val user = _uiState.value.currentUser ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            // Optimistically mark CONFIRMED so it leaves "Booking requests" immediately.
+            _uiState.update {
+                it.copy(
+                    isMainSubmitting = true,
+                    errorMessage = null,
+                    infoMessage = null,
+                    dashboardState = it.dashboardState.copy(
+                        myTutorBookings = it.dashboardState.myTutorBookings.map { b ->
+                            if (b.id == bookingId) b.copy(status = "CONFIRMED") else b
+                        }
+                    )
+                )
+            }
             try {
                 tutoringRepository.acceptBooking(bookingId, user)
                 _uiState.update { it.copy(isMainSubmitting = false, infoMessage = "Booking accepted.") }
-                loadMainData(user)
             } catch (error: Throwable) {
                 _uiState.update { it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error)) }
             }
+            // Reconcile with server truth (also reverts the optimistic change on failure).
+            loadMainData(user)
         }
     }
 
     fun declineBooking(bookingId: String, reason: String) {
         val user = _uiState.value.currentUser ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isMainSubmitting = true, errorMessage = null, infoMessage = null) }
+            // Optimistically mark DECLINED so it leaves "Booking requests" immediately.
+            _uiState.update {
+                it.copy(
+                    isMainSubmitting = true,
+                    errorMessage = null,
+                    infoMessage = null,
+                    dashboardState = it.dashboardState.copy(
+                        myTutorBookings = it.dashboardState.myTutorBookings.map { b ->
+                            if (b.id == bookingId) b.copy(status = "DECLINED") else b
+                        }
+                    )
+                )
+            }
             try {
                 tutoringRepository.declineBooking(bookingId, user, reason)
                 _uiState.update { it.copy(isMainSubmitting = false, infoMessage = "Booking declined.") }
-                loadMainData(user)
             } catch (error: Throwable) {
                 _uiState.update { it.copy(isMainSubmitting = false, errorMessage = authRepository.userMessage(error)) }
             }
+            loadMainData(user)
         }
     }
 
@@ -1387,6 +1481,93 @@ class SmartCampusViewModel(
         }
     }
 
+    // ----- Lesson detail + per-lesson files -----
+
+    fun openLessonDetail(bookingId: String) {
+        if (bookingId.isBlank()) return
+        lessonMaterialsRealtime?.remove()
+        _uiState.update {
+            it.copy(
+                dashboardState = it.dashboardState.copy(
+                    lessonDetailBookingId = bookingId,
+                    lessonMaterials = emptyList(),
+                    lessonMaterialsLoading = true,
+                    lessonMaterialUploadProgress = null
+                )
+            )
+        }
+        lessonMaterialsRealtime = lessonMaterialRepository.listenLessonMaterials(
+            bookingId = bookingId,
+            onUpdate = { materials ->
+                _uiState.update {
+                    it.copy(dashboardState = it.dashboardState.copy(lessonMaterials = materials, lessonMaterialsLoading = false))
+                }
+            },
+            onError = { error ->
+                _uiState.update { it.copy(dashboardState = it.dashboardState.copy(lessonMaterialsLoading = false)) }
+                showRealtimeError("Lesson files", error)
+            }
+        )
+    }
+
+    fun closeLessonDetail() {
+        lessonMaterialsRealtime?.remove()
+        lessonMaterialsRealtime = null
+        _uiState.update {
+            it.copy(
+                dashboardState = it.dashboardState.copy(
+                    lessonDetailBookingId = null,
+                    lessonMaterials = emptyList(),
+                    lessonMaterialsLoading = false,
+                    lessonMaterialUploadProgress = null
+                )
+            )
+        }
+    }
+
+    fun uploadLessonMaterial(uri: String, fileName: String, mimeType: String, sizeBytes: Long) {
+        val me = _uiState.value.currentUser ?: return
+        val bookingId = _uiState.value.dashboardState.lessonDetailBookingId ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(dashboardState = it.dashboardState.copy(lessonMaterialUploadProgress = 0f), errorMessage = null) }
+            try {
+                lessonMaterialRepository.uploadLessonMaterial(
+                    bookingId = bookingId,
+                    uploader = me,
+                    fileName = fileName,
+                    mimeType = mimeType,
+                    sizeBytes = sizeBytes,
+                    uri = Uri.parse(uri),
+                    onProgress = { progress ->
+                        _uiState.update { it.copy(dashboardState = it.dashboardState.copy(lessonMaterialUploadProgress = progress)) }
+                    }
+                )
+                _uiState.update { it.copy(dashboardState = it.dashboardState.copy(lessonMaterialUploadProgress = null)) }
+            } catch (error: Throwable) {
+                Log.e(TAG, "Uploading lesson material failed", error)
+                _uiState.update {
+                    it.copy(
+                        dashboardState = it.dashboardState.copy(lessonMaterialUploadProgress = null),
+                        errorMessage = authRepository.userMessage(error)
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteLessonMaterial(materialId: String) {
+        val bookingId = _uiState.value.dashboardState.lessonDetailBookingId ?: return
+        val material = _uiState.value.dashboardState.lessonMaterials.firstOrNull { it.id == materialId } ?: return
+        viewModelScope.launch {
+            try {
+                lessonMaterialRepository.deleteLessonMaterial(bookingId, material)
+            } catch (error: Throwable) {
+                Log.e(TAG, "Deleting lesson material failed", error)
+                _uiState.update { it.copy(errorMessage = authRepository.userMessage(error)) }
+            }
+        }
+    }
+
     fun sendMessage() {
         val me = _uiState.value.currentUser ?: return
         val chat = _uiState.value.chat
@@ -2037,6 +2218,7 @@ class SmartCampusViewModel(
                 state.copy(
                     dashboardState = dashboard.copy(
                         isLoading = false,
+                        myStudentBookings = mergeOptimisticStudentBookings(dashboard.myStudentBookings),
                         assignments = assignments,
                         mySubmissions = mySubmissions,
                         visibleCourseIds = visibleCourseIds,
@@ -2044,7 +2226,11 @@ class SmartCampusViewModel(
                         rosterByCourse = state.dashboardState.rosterByCourse,
                         submissionsByAssignment = state.dashboardState.submissionsByAssignment,
                         notifications = state.dashboardState.notifications,
-                        notificationCount = state.dashboardState.notificationCount
+                        notificationCount = state.dashboardState.notificationCount,
+                        lessonDetailBookingId = state.dashboardState.lessonDetailBookingId,
+                        lessonMaterials = state.dashboardState.lessonMaterials,
+                        lessonMaterialsLoading = state.dashboardState.lessonMaterialsLoading,
+                        lessonMaterialUploadProgress = state.dashboardState.lessonMaterialUploadProgress
                     )
                 )
             }
@@ -2199,6 +2385,7 @@ class SmartCampusViewModel(
                 _uiState.update { state ->
                     state.copy(
                         dashboardState = dashboard.copy(
+                            myStudentBookings = mergeOptimisticStudentBookings(dashboard.myStudentBookings),
                             assignments = state.dashboardState.assignments,
                             mySubmissions = state.dashboardState.mySubmissions,
                             submissionsByAssignment = state.dashboardState.submissionsByAssignment,
@@ -2206,7 +2393,11 @@ class SmartCampusViewModel(
                             visibleCourseIds = state.dashboardState.visibleCourseIds,
                             rosterByCourse = state.dashboardState.rosterByCourse,
                             notifications = state.dashboardState.notifications,
-                            notificationCount = state.dashboardState.notificationCount
+                            notificationCount = state.dashboardState.notificationCount,
+                            lessonDetailBookingId = state.dashboardState.lessonDetailBookingId,
+                            lessonMaterials = state.dashboardState.lessonMaterials,
+                            lessonMaterialsLoading = state.dashboardState.lessonMaterialsLoading,
+                            lessonMaterialUploadProgress = state.dashboardState.lessonMaterialUploadProgress
                         )
                     )
                 }
@@ -2351,7 +2542,9 @@ class SmartCampusViewModel(
         messagesRealtime?.remove()
         typingRealtime?.remove()
         materialsRealtime?.remove()
+        lessonMaterialsRealtime?.remove()
         notificationsRealtime?.remove()
+        pendingOptimisticBookings.clear()
         mySubmissionAssignmentIds = emptyList()
         tutoringRealtime = null
         assignmentsRealtime = null

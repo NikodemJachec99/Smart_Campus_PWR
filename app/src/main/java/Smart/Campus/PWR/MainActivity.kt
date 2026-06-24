@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
 
 class MainActivity : ComponentActivity() {
 
@@ -17,6 +18,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Own the window insets in Compose so the keyboard is handled by imePadding()
+        // (WindowInsets.ime). On API 35+ `windowSoftInputMode=adjustResize` is ignored, so
+        // without this the chat composer ends up behind the keyboard.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         FcmTokenRegistrar.ensureChannel(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)

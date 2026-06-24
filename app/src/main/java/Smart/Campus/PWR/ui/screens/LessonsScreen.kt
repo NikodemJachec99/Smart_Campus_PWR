@@ -94,7 +94,8 @@ fun LessonsTab(
     onStartReschedule: (String) -> Unit = {},
     onReschedule: (String, String) -> Unit = { _, _ -> },
     onClearReschedule: () -> Unit = {},
-    onOpenDirectWith: (String, String) -> Unit = { _, _ -> }
+    onOpenDirectWith: (String, String) -> Unit = { _, _ -> },
+    onOpenDetail: (String) -> Unit = {}
 ) {
     val bookings = state.dashboardState.myStudentBookings
     val reviewedIds = state.dashboardState.reviewsByMe
@@ -173,13 +174,15 @@ fun LessonsTab(
                     onStartReschedule = onStartReschedule,
                     onReschedule = onReschedule,
                     onClearReschedule = onClearReschedule,
+                    onOpenDetail = onOpenDetail,
                     now = now
                 )
             } else {
                 PastContent(
                     past = past,
                     reviewedIds = reviewedIds,
-                    onNavigate = onNavigate
+                    onNavigate = onNavigate,
+                    onOpenDetail = onOpenDetail
                 )
             }
         }
@@ -202,6 +205,7 @@ private fun UpcomingContent(
     onStartReschedule: (String) -> Unit,
     onReschedule: (String, String) -> Unit,
     onClearReschedule: () -> Unit,
+    onOpenDetail: (String) -> Unit,
     now: LocalDateTime
 ) {
     // Rate prompt banner
@@ -241,20 +245,27 @@ private fun UpcomingContent(
             )
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 lessons.forEach { lesson ->
-                    UpcomingLessonCard(
-                        lesson = lesson,
-                        isSoon = lesson.isSoon(now),
-                        isRescheduleTarget = rescheduleTargetBookingId == lesson.id,
-                        openSlotsForTutor = availableTutorSlots.filter {
-                            it.tutorId == lesson.tutorId && !it.isBooked
-                        },
-                        onCancelBooking = onCancelBooking,
-                        onNavigate = onNavigate,
-                        onOpenDirectWith = onOpenDirectWith,
-                        onStartReschedule = onStartReschedule,
-                        onReschedule = onReschedule,
-                        onClearReschedule = onClearReschedule
-                    )
+                    Box(
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onOpenDetail(lesson.id) }
+                    ) {
+                        UpcomingLessonCard(
+                            lesson = lesson,
+                            isSoon = lesson.isSoon(now),
+                            isRescheduleTarget = rescheduleTargetBookingId == lesson.id,
+                            openSlotsForTutor = availableTutorSlots.filter {
+                                it.tutorId == lesson.tutorId && !it.isBooked
+                            },
+                            onCancelBooking = onCancelBooking,
+                            onNavigate = onNavigate,
+                            onOpenDirectWith = onOpenDirectWith,
+                            onStartReschedule = onStartReschedule,
+                            onReschedule = onReschedule,
+                            onClearReschedule = onClearReschedule
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
@@ -281,7 +292,8 @@ private fun UpcomingContent(
 private fun PastContent(
     past: List<LessonBookingUi>,
     reviewedIds: Set<String>,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    onOpenDetail: (String) -> Unit
 ) {
     if (past.isEmpty()) {
         LessonsEmptyState(
@@ -294,11 +306,18 @@ private fun PastContent(
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         past.forEach { lesson ->
-            PastLessonCard(
-                lesson = lesson,
-                isReviewed = lesson.id in reviewedIds,
-                onRate = { onNavigate(DashboardRoutes.REVIEWS) }
-            )
+            Box(
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onOpenDetail(lesson.id) }
+            ) {
+                PastLessonCard(
+                    lesson = lesson,
+                    isReviewed = lesson.id in reviewedIds,
+                    onRate = { onNavigate(DashboardRoutes.REVIEWS) }
+                )
+            }
         }
     }
 }

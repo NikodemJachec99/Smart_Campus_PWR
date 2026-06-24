@@ -183,6 +183,21 @@ service cloud.firestore {
       );
     }
 
+    function isLessonParticipant(bookingId) {
+      return isSignedIn()
+        && exists(bookingPath(bookingId))
+        && (
+          get(bookingPath(bookingId)).data.studentId == request.auth.uid
+          || get(bookingPath(bookingId)).data.tutorId == request.auth.uid
+        );
+    }
+
+    function isLessonTutor(bookingId) {
+      return isSignedIn()
+        && exists(bookingPath(bookingId))
+        && get(bookingPath(bookingId)).data.tutorId == request.auth.uid;
+    }
+
     function hasFutureWindow(data) {
       return data.startAt is timestamp
         && data.endAt is timestamp
@@ -498,6 +513,41 @@ service cloud.firestore {
         || isTutorStatusUpdate()
         || isRescheduleOrCancel();
       allow delete: if isAdmin();
+
+      // Per-lesson shared files. Either participant (student or tutor) may upload
+      // and read; the lesson's tutor (or the uploader, or admin) may delete.
+      match /materials/{materialId} {
+        allow read: if isAdmin() || isLessonParticipant(bookingId);
+
+        allow create: if isLessonParticipant(bookingId)
+          && request.resource.data.uploaderUid == request.auth.uid
+          && request.resource.data.uploaderName is string
+          && request.resource.data.fileName is string
+          && request.resource.data.fileName.size() > 0
+          && request.resource.data.fileName.size() <= 180
+          && request.resource.data.mimeType in allowedChatMimeTypes()
+          && request.resource.data.sizeBytes is int
+          && request.resource.data.sizeBytes > 0
+          && request.resource.data.sizeBytes < 10 * 1024 * 1024
+          && request.resource.data.storagePath is string
+          && request.resource.data.downloadUrl is string
+          && request.resource.data.keys().hasOnly([
+            'fileName',
+            'mimeType',
+            'sizeBytes',
+            'storagePath',
+            'downloadUrl',
+            'uploaderUid',
+            'uploaderName',
+            'createdAt'
+          ]);
+
+        allow update: if isAdmin();
+
+        allow delete: if isAdmin()
+          || isLessonTutor(bookingId)
+          || (isLessonParticipant(bookingId) && resource.data.uploaderUid == request.auth.uid);
+      }
     }
 
     match /reviews/{reviewId} {
@@ -541,9 +591,12 @@ service cloud.firestore {
     }
 
     match /assignments/{assignmentId} {
+      // Course owners (tutors) and enrolled members (students) can read every
+      // assignment in their course — not only the assignment's own author.
+      // Rules are not filters: one unreadable doc fails the whole dashboard query.
       allow read: if isAdmin()
         || (isTutor() && resource.data.tutorUid == request.auth.uid)
-        || (resource.data.courseId is string && isCourseMember(resource.data.courseId));
+        || (resource.data.courseId is string && isCourseParticipant(resource.data.courseId));
 
       allow create: if (isAdmin()
           || (isTutor()
@@ -561,7 +614,8 @@ service cloud.firestore {
         allow read: if isAdmin()
           || (isSignedIn() && resource.data.studentUid == request.auth.uid)
           || (isTutor()
-              && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.tutorUid == request.auth.uid);
+              && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.tutorUid == request.auth.uid)
+          || isCourseOwner(get(/databases/$(database)/documents/assignments/$(assignmentId)).data.courseId);
 
         allow create: if isStudent()
           && request.resource.data.studentUid == request.auth.uid

@@ -133,5 +133,10 @@ data class DashboardUiState(
     val courseCatalog: List<CourseUi> = emptyList(),
     val visibleCourseIds: List<String> = emptyList(),
     val rosterByCourse: Map<String, List<CourseMemberUi>> = emptyMap(),
-    val notifications: List<NotificationUi> = emptyList()
+    val notifications: List<NotificationUi> = emptyList(),
+    // Per-lesson detail overlay + its shared files
+    val lessonDetailBookingId: String? = null,
+    val lessonMaterials: List<CourseMaterialUi> = emptyList(),
+    val lessonMaterialsLoading: Boolean = false,
+    val lessonMaterialUploadProgress: Float? = null
 )

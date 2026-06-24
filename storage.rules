@@ -27,6 +27,25 @@ service firebase.storage {
       return /databases/(default)/documents/courses/$(courseId)/members/$(request.auth.uid);
     }
 
+    function bookingPath(bookingId) {
+      return /databases/(default)/documents/bookings/$(bookingId);
+    }
+
+    function isLessonParticipant(bookingId) {
+      return isSignedIn()
+        && firestore.exists(bookingPath(bookingId))
+        && (
+          firestore.get(bookingPath(bookingId)).data.studentId == request.auth.uid
+          || firestore.get(bookingPath(bookingId)).data.tutorId == request.auth.uid
+        );
+    }
+
+    function isLessonTutor(bookingId) {
+      return isSignedIn()
+        && firestore.exists(bookingPath(bookingId))
+        && firestore.get(bookingPath(bookingId)).data.tutorId == request.auth.uid;
+    }
+
     function rolesList() {
       return isSignedIn() && firestore.exists(userPath()) && firestore.get(userPath()).data.roles is list
         ? firestore.get(userPath()).data.roles
@@ -114,6 +133,20 @@ service firebase.storage {
           firestore.exists(coursePath(courseId))
           && firestore.get(coursePath(courseId)).data.tutorUid == request.auth.uid
         )
+      );
+    }
+
+    match /lesson_materials/{bookingId}/{uploaderUid}/{materialId}/{fileName} {
+      allow read: if isLessonParticipant(bookingId) || hasRole('admin');
+      allow create, update: if isLessonParticipant(bookingId)
+        && request.auth.uid == uploaderUid
+        && request.resource.size > 0
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType in allowedChatMimeTypes();
+      allow delete: if isSignedIn() && (
+        request.auth.uid == uploaderUid
+        || hasRole('admin')
+        || isLessonTutor(bookingId)
       );
     }
 
